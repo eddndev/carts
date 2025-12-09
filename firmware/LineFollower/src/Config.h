@@ -36,11 +36,11 @@ const uint8_t SENSOR_COUNT = 6;
 #define PIN_M2_IN4 4
 
 // --- PID & Speed Control ---
-#define PID_KP 0.12  // Increased from 0.05 for sharp turns
+#define PID_KP 0.09  // Increased for sharper turns (Mid-point)
 #define PID_KI 0.0   
-#define PID_KD 0.5   // Reduced Damping to allow faster reaction
+#define PID_KD 1.0   // High Damping maintained
 
-#define BASE_SPEED 110 // Increased Torque as requested
+#define BASE_SPEED 90 // Compromise speed for control + torque
 #define MAX_SPEED 200 // Allow faster corrections
 #define TURN_SPEED 150 
 

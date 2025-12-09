@@ -76,9 +76,10 @@ void loop() {
   int error = position - 2500; // 0-5000 -> -2500 to 2500
   int correction = pid.compute(error);
   
-  // Standard steering: Line Right -> Pos 5000 -> Err + -> Left Speed Increase -> Turn Right
-  int leftSpeed = BASE_SPEED + correction;
-  int rightSpeed = BASE_SPEED - correction;
+  // Inverted steering signs based on user report:
+  // Line Right -> Turn Right -> Needs Right Loop Correction
+  int leftSpeed = BASE_SPEED - correction;
+  int rightSpeed = BASE_SPEED + correction;
   
   // Constrain speeds
   leftSpeed = constrain(leftSpeed, -MAX_SPEED, MAX_SPEED);
