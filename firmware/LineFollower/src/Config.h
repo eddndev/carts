@@ -34,4 +34,13 @@ const uint8_t SENSOR_COUNT = 6;
 #define PIN_M2_IN3 12
 #define PIN_M2_IN4 13
 
+// --- PID & Speed Control ---
+#define PID_KP 0.1   // Proportional (Start small)
+#define PID_KI 0.0   // Integral (Usually 0 for line followers)
+#define PID_KD 0.0   // Derivative (Crucial for damping)
+
+#define BASE_SPEED 100 // 0-255 (speed to go straight)
+#define MAX_SPEED 200  // Limit to prevent runaway
+#define TURN_SPEED 120 // Speed for sharp turns (if used)
+
 #endif

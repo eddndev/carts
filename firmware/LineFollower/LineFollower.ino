@@ -19,12 +19,14 @@
 #include "src/LedController.h"
 #include "src/LineSensor.h"
 #include "src/MotorController.h"
+#include "src/PIDController.h"
 
 // Instantiate objects
 NetworkManager network;
 LedController led;
 LineSensor sensors;
 MotorController motors;
+PIDController pid(PID_KP, PID_KI, PID_KD);
 
 unsigned long lastPingTime = 0;
 const long interval = 2000; // Send ping every 2 seconds
@@ -70,21 +72,32 @@ void loop() {
   // Visualize Position on Matrix
   led.showLinePosition(position);
   
-  // Checks for commands from Serial (for manual testing)
+  // --- PID CONTROL ---
+  int error = position - 2500; // 0-5000 -> -2500 to 2500
+  int correction = pid.compute(error);
+  
+  int leftSpeed = BASE_SPEED + correction;
+  int rightSpeed = BASE_SPEED - correction;
+  
+  // Constrain speeds
+  leftSpeed = constrain(leftSpeed, -MAX_SPEED, MAX_SPEED);
+  rightSpeed = constrain(rightSpeed, -MAX_SPEED, MAX_SPEED);
+  
+  // Apply to motors
+  motors.setSpeeds(leftSpeed, rightSpeed); // ENABLE MOVEMENT
+  
+  // Checks for commands from Serial (for manual testing and Tuning)
   if (Serial.available()) {
       char c = Serial.read();
       if (c == 'M') {
-          Serial.println("Running Motor Test...");
-          motors.forward(150);
-          delay(1000);
-          motors.backward(150);
-          delay(1000);
-          motors.turnLeft(150);
-          delay(1000);
-          motors.turnRight(150);
-          delay(1000);
-          motors.stop();
-          Serial.println("Motor Test Done.");
+          // Manual Test
+      } else if (c == 'G') {
+          // 'G' for GO
+          Serial.println("GO! Motors Enabled.");
+          motors.setSpeeds(leftSpeed, rightSpeed); 
+          // We need a state machine here really: IDLE vs RUNNING
+      } else if (c == 'S') {
+           motors.stop();
       }
   }
 
@@ -92,8 +105,16 @@ void loop() {
   static unsigned long lastPrint = 0;
   if (millis() - lastPrint > 500) {
       lastPrint = millis();
-      Serial.print("Position: ");
-      Serial.println(position);
+      Serial.print("Pos: ");
+      Serial.print(position);
+      Serial.print(" Err: ");
+      Serial.print(error);
+      Serial.print(" Corr: ");
+      Serial.print(correction);
+      Serial.print(" L: ");
+      Serial.print(leftSpeed);
+      Serial.print(" R: ");
+      Serial.println(rightSpeed);
   }
 
   // Send "Ping" periodically
@@ -102,8 +123,8 @@ void loop() {
       lastPingTime = currentMillis;
       String pingMsg = "PING from " + String(WiFi.localIP()[3]); // Send last octet of IP
       network.sendPacket(pingMsg);
-      Serial.println("Sent: " + pingMsg);
+      // Serial.println("Sent: " + pingMsg); // Reduce spam
   }
   
-  delay(10); // Small delay for stability
+  delay(1); // Minimize delay for loop speed
 }
