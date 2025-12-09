@@ -1,3 +1,4 @@
+
 # WiFi Line Follower Carts
 
 Project for two Arduino Uno R4 WiFi based line-following carts with peer-to-peer communication.
@@ -15,7 +16,14 @@ Project for two Arduino Uno R4 WiFi based line-following carts with peer-to-peer
 1. This project uses `arduino-cli` for management.
 2. Board: Arduino Uno R4 WiFi (`arduino:renesas_uno`).
 
-## Features (Planned)
-- Line following using IR sensors.
-- Inter-cart communication via WiFi (UDP).
-- Status display on built-in LED Matrix.
+## Features
+- [x] **Line Following**: Robust PID control with deadband compensation and speed matching.
+- [x] **Sensor Calibration**: Auto-calibration routine with LED Matrix feedback.
+- [x] **WiFi Communication**: Basic P2P UDP packet sending.
+- [x] **Status Display**: Real-time line position and calibration status on LED Matrix.
+
+## Configuration (v1.0)
+- **Base Speed**: 90
+- **PID**: Kp=0.09, Kd=1.0
+- **Sensors**: QTR-8A (Analog) on Pins A5-A0.
+- **Motors**: L298N Driver.
