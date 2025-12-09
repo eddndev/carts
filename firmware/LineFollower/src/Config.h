@@ -24,23 +24,27 @@ const uint8_t SENSOR_PINS[] = {A0, A1, A2, A3, A4, A5};
 const uint8_t SENSOR_COUNT = 6;
 
 // --- Motors (L298N) ---
-// Left Motor
-#define PIN_M1_EN 3  // PWM
-#define PIN_M1_IN1 2
-#define PIN_M1_IN2 4
+// Left Motor (Physically connected to M2 pins)
+#define PIN_M1_EN 11 
+#define PIN_M1_IN1 13 // Swapped 12/13 to fix "Backward" issue
+#define PIN_M1_IN2 12
 
-// Right Motor
-#define PIN_M2_EN 11 // PWM (Check R4 Pinout, 11 is usually PWM)
-#define PIN_M2_IN3 12
-#define PIN_M2_IN4 13
+// Right Motor (Physically connected to M1 pins)
+#define PIN_M2_EN 3  
+#define PIN_M2_IN3 2 // Assuming standard (check next test)
+#define PIN_M2_IN4 4
 
 // --- PID & Speed Control ---
 #define PID_KP 0.1   // Proportional (Start small)
 #define PID_KI 0.0   // Integral (Usually 0 for line followers)
 #define PID_KD 0.0   // Derivative (Crucial for damping)
 
-#define BASE_SPEED 100 // 0-255 (speed to go straight)
-#define MAX_SPEED 200  // Limit to prevent runaway
-#define TURN_SPEED 120 // Speed for sharp turns (if used)
+#define BASE_SPEED 130 // Must be > MIN_PWM !
+#define MAX_SPEED 200  
+#define TURN_SPEED 150 
+
+// Deadband Correction (Measured)
+#define MIN_PWM_L 105
+#define MIN_PWM_R 97
 
 #endif

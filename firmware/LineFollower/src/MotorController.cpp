@@ -38,6 +38,20 @@ void MotorController::turnRight(int speed) {
 }
 
 void MotorController::setSpeeds(int leftSpeed, int rightSpeed) {
+    // Apply Deadband Correction for Left Motor
+    if (leftSpeed > 0) {
+        leftSpeed = map(leftSpeed, 0, 255, MIN_PWM_L, 255);
+    } else if (leftSpeed < 0) {
+        leftSpeed = map(leftSpeed, -255, 0, -255, -MIN_PWM_L);
+    }
+
+    // Apply Deadband Correction for Right Motor
+    if (rightSpeed > 0) {
+        rightSpeed = map(rightSpeed, 0, 255, MIN_PWM_R, 255);
+    } else if (rightSpeed < 0) {
+        rightSpeed = map(rightSpeed, -255, 0, -255, -MIN_PWM_R);
+    }
+
     setMotor(PIN_M1_EN, PIN_M1_IN1, PIN_M1_IN2, leftSpeed);
     setMotor(PIN_M2_EN, PIN_M2_IN3, PIN_M2_IN4, rightSpeed);
 }

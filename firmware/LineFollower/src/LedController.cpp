@@ -69,19 +69,25 @@ void LedController::showLinePosition(uint16_t position) {
     if (isAnimating) return; 
 
     // Position is 0 to (Count-1)*1000.  For 6 sensors: 0-5000.
-    // Center is 2500.
-    // Map 0-5000 to 0-11 (Matrix width)
+    // Map 0-5000 to length of bar (0-12 columns)
     
-    int dotCol = map(position, 0, 5000, 0, 11);
-    if (dotCol < 0) dotCol = 0;
-    if (dotCol > 11) dotCol = 11;
+    int barWidth = map(position, 0, 5000, 0, 12);
+    if (barWidth < 0) barWidth = 0;
+    if (barWidth > 12) barWidth = 12;
     
-    // Draw a single dot at the bottom row? Or a vertical line?
-    // Let's draw a 2-pixel wide vertical line to be visible
+    // Serial.print("Pos: "); Serial.print(position); Serial.print(" Width: "); Serial.println(barWidth); // UNCOMMENT FOR DEBUG
+    Serial.print("Pos: "); Serial.print(position); Serial.print(" Width: "); Serial.println(barWidth);
+    
+    // Draw columns from 0 up to barWidth
     uint8_t frame[8][12] = {0};
     
-    for (int r = 0; r < 8; r++) {
-        frame[r][dotCol] = 1;
+    for (int col = 0; col < 12; col++) {
+        if (col < barWidth) {
+             // Fill this column
+             for (int r = 0; r < 8; r++) {
+                 frame[r][col] = 1;
+             }
+        }
     }
     
     matrix.renderBitmap(frame, 8, 12);
