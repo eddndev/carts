@@ -10,8 +10,10 @@ public:
     LedController();
     void begin();
     void update();
-    void showPing(); // Call this when packet received
-    void showSensorValues(uint16_t* values, uint8_t count); // Visualization
+    void showPing(); 
+    void showSensorValues(uint16_t* values, uint8_t count); 
+    void showCalibration(); // Animation during calibration
+    void showLinePosition(uint16_t position); // Single dot moving
 
 private:
     ArduinoLEDMatrix matrix;

@@ -32,10 +32,12 @@ void setup() {
   // Initialize Sensors
   sensors.begin();
   
-  // Optional: Calibrate on start?
-  // let's do a quick manual calibration later, for now we want raw values
-  // sensors.calibrate(); 
-
+  // Calibration Sequence
+  Serial.println("Starting Calibration...");
+  led.showCalibration();
+  sensors.calibrate(); 
+  Serial.println("Calibration Complete.");
+  
   // Network initialization
   network.begin();
 }
@@ -53,22 +55,18 @@ void loop() {
       led.showPing();
   }
   
-  // Read Sensors (Raw for validation)
-  uint16_t* rawValues = sensors.getRawValues();
+  // Read Line Position
+  uint16_t position = sensors.readLine();
   
-  // Visualize Sensors on Matrix
-  led.showSensorValues(rawValues, SENSOR_COUNT);
+  // Visualize Position on Matrix
+  led.showLinePosition(position);
   
   // Debug print periodically
   static unsigned long lastPrint = 0;
   if (millis() - lastPrint > 500) {
       lastPrint = millis();
-      Serial.print("Sensors: ");
-      for (int i=0; i<SENSOR_COUNT; i++) {
-        Serial.print(rawValues[i]);
-        Serial.print("\t");
-      }
-      Serial.println();
+      Serial.print("Position: ");
+      Serial.println(position);
   }
 
   // Send "Ping" periodically

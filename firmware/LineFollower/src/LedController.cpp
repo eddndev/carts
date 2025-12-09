@@ -53,3 +53,36 @@ void LedController::showSensorValues(uint16_t* values, uint8_t count) {
     
     matrix.renderBitmap(frame, 8, 12);
 }
+
+void LedController::showCalibration() {
+   // Simple full fill or blinking pattern
+   // Let's do a static "Calibrating" pattern (Outer box)
+   const uint32_t FRAME_CALIB[] = {
+        0xFFF00000,
+        0x80180180,
+        0x00000FFF
+   };
+   matrix.loadFrame(FRAME_CALIB);
+}
+
+void LedController::showLinePosition(uint16_t position) {
+    if (isAnimating) return; 
+
+    // Position is 0 to (Count-1)*1000.  For 6 sensors: 0-5000.
+    // Center is 2500.
+    // Map 0-5000 to 0-11 (Matrix width)
+    
+    int dotCol = map(position, 0, 5000, 0, 11);
+    if (dotCol < 0) dotCol = 0;
+    if (dotCol > 11) dotCol = 11;
+    
+    // Draw a single dot at the bottom row? Or a vertical line?
+    // Let's draw a 2-pixel wide vertical line to be visible
+    uint8_t frame[8][12] = {0};
+    
+    for (int r = 0; r < 8; r++) {
+        frame[r][dotCol] = 1;
+    }
+    
+    matrix.renderBitmap(frame, 8, 12);
+}
