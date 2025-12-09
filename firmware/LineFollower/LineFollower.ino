@@ -11,21 +11,43 @@
 #include <Arduino.h>
 #include "WiFiS3.h"
 #include "Arduino_LED_Matrix.h"
+#include "src/NetworkManager.h"
 
 // Instantiate objects
 ArduinoLEDMatrix matrix;
+NetworkManager network;
+
+unsigned long lastPingTime = 0;
+const long interval = 2000; // Send ping every 2 seconds
 
 void setup() {
   Serial.begin(115200);
   
-  // Initialize Matrix
+  // Matrix initialization
   matrix.begin();
   
-  // TODO: Add WiFi setup
-  // TODO: Add Motor setup
+  // Network initialization
+  network.begin();
 }
 
 void loop() {
-  // Main control loop
-  delay(100);
+  // Update Network (receive packets)
+  network.update();
+  
+  // Check if we received a message
+  if (network.hasNewMessage()) {
+      Serial.println("Action: Packet received!");
+      // TODO: Show visual indication on Matrix
+  }
+  
+  // Send "Ping" periodically
+  unsigned long currentMillis = millis();
+  if (currentMillis - lastPingTime >= interval) {
+      lastPingTime = currentMillis;
+      String pingMsg = "PING from " + String(WiFi.localIP()[3]); // Send last octet of IP
+      network.sendPacket(pingMsg);
+      Serial.println("Sent: " + pingMsg);
+  }
+  
+  delay(10); // Small delay for stability
 }
