@@ -17,4 +17,10 @@
 #define UDP_PORT 4210
 #define BROADCAST_IP "255.255.255.255" // Broadcast to all local devices
 
+// --- Sensors & Actuators ---
+// QTR-8A (Analog) Sensor Pins
+// We use 6 sensors connected to Analog pins
+const uint8_t SENSOR_PINS[] = {A0, A1, A2, A3, A4, A5};
+const uint8_t SENSOR_COUNT = 6;
+
 #endif

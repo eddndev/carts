@@ -11,6 +11,7 @@ public:
     void begin();
     void update();
     void showPing(); // Call this when packet received
+    void showSensorValues(uint16_t* values, uint8_t count); // Visualization
 
 private:
     ArduinoLEDMatrix matrix;
