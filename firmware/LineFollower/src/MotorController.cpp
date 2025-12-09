@@ -38,6 +38,10 @@ void MotorController::turnRight(int speed) {
 }
 
 void MotorController::setSpeeds(int leftSpeed, int rightSpeed) {
+    // Apply Speed Matching Factors
+    leftSpeed = leftSpeed * SPEED_FACTOR_L;
+    rightSpeed = rightSpeed * SPEED_FACTOR_R;
+
     // Apply Deadband Correction for Left Motor
     if (leftSpeed > 0) {
         leftSpeed = map(leftSpeed, 0, 255, MIN_PWM_L, 255);

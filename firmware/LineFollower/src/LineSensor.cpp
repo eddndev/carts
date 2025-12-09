@@ -8,7 +8,7 @@ void LineSensor::begin() {
     qtr.setSensorPins(SENSOR_PINS, SENSOR_COUNT);
     
     // Optional: set emitter pin if used, otherwise they are always on or tied to VCC
-    // qtr.setEmitterPin(2); 
+    qtr.setEmitterPin(PIN_SENSOR_EMITTER); 
 }
 
 void LineSensor::calibrate() {
@@ -16,6 +16,7 @@ void LineSensor::calibrate() {
     
     // Calibrate for approx 5 seconds (200 * 25ms?) no, just loops
     // usually 400 iterations is good
+    // Calibrate for approx 2-3 seconds (400 iters)
     for (uint16_t i = 0; i < 400; i++) {
         qtr.calibrate();
         

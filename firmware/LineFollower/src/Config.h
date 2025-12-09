@@ -20,8 +20,9 @@
 // --- Sensors & Actuators ---
 // QTR-8A (Analog) Sensor Pins
 // We use 6 sensors connected to Analog pins (A0-A5)
-const uint8_t SENSOR_PINS[] = {A0, A1, A2, A3, A4, A5};
+const uint8_t SENSOR_PINS[] = {A5, A4, A3, A2, A1, A0};
 const uint8_t SENSOR_COUNT = 6;
+#define PIN_SENSOR_EMITTER 6 // Connect 'LEDON' or 'EMITTER' pin here for ambient light rejection
 
 // --- Motors (L298N) ---
 // Left Motor (Physically connected to M2 pins)
@@ -35,16 +36,21 @@ const uint8_t SENSOR_COUNT = 6;
 #define PIN_M2_IN4 4
 
 // --- PID & Speed Control ---
-#define PID_KP 0.1   // Proportional (Start small)
-#define PID_KI 0.0   // Integral (Usually 0 for line followers)
-#define PID_KD 0.0   // Derivative (Crucial for damping)
+#define PID_KP 0.12  // Increased from 0.05 for sharp turns
+#define PID_KI 0.0   
+#define PID_KD 0.5   // Reduced Damping to allow faster reaction
 
-#define BASE_SPEED 130 // Must be > MIN_PWM !
-#define MAX_SPEED 200  
+#define BASE_SPEED 110 // Increased Torque as requested
+#define MAX_SPEED 200 // Allow faster corrections
 #define TURN_SPEED 150 
 
 // Deadband Correction (Measured)
-#define MIN_PWM_L 105
-#define MIN_PWM_R 97
+// Lowered slightly to rely on kinetic friction
+#define MIN_PWM_L 90 
+#define MIN_PWM_R 85
+
+// Speed Matching Factors (0.0 to 1.0)
+#define SPEED_FACTOR_L 1.0
+#define SPEED_FACTOR_R 0.95
 
 #endif
