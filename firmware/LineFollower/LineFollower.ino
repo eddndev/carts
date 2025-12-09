@@ -12,13 +12,19 @@
 #include "WiFiS3.h"
 #include "Arduino_LED_Matrix.h"
 #include "src/NetworkManager.h"
+#include <Arduino.h>
+#include "WiFiS3.h"
+#include "Arduino_LED_Matrix.h"
+#include "src/NetworkManager.h"
 #include "src/LedController.h"
 #include "src/LineSensor.h"
+#include "src/MotorController.h"
 
 // Instantiate objects
 NetworkManager network;
 LedController led;
 LineSensor sensors;
+MotorController motors;
 
 unsigned long lastPingTime = 0;
 const long interval = 2000; // Send ping every 2 seconds
@@ -29,6 +35,9 @@ void setup() {
   // Matrix initialization
   led.begin();
   
+  // Initialize Motors
+  motors.begin();
+
   // Initialize Sensors
   sensors.begin();
   
@@ -61,6 +70,24 @@ void loop() {
   // Visualize Position on Matrix
   led.showLinePosition(position);
   
+  // Checks for commands from Serial (for manual testing)
+  if (Serial.available()) {
+      char c = Serial.read();
+      if (c == 'M') {
+          Serial.println("Running Motor Test...");
+          motors.forward(150);
+          delay(1000);
+          motors.backward(150);
+          delay(1000);
+          motors.turnLeft(150);
+          delay(1000);
+          motors.turnRight(150);
+          delay(1000);
+          motors.stop();
+          Serial.println("Motor Test Done.");
+      }
+  }
+
   // Debug print periodically
   static unsigned long lastPrint = 0;
   if (millis() - lastPrint > 500) {
