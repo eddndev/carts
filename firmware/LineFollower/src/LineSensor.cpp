@@ -14,8 +14,8 @@ void LineSensor::begin() {
 void LineSensor::calibrate() {
     Serial.println("Calibrating sensors... Move sensor over line!");
     
-    // Calibrate for approx 2-3 seconds (400 iters)
-    for (uint16_t i = 0; i < 400; i++) {
+    // Calibrate for approx 3 seconds (150 iters)
+    for (uint16_t i = 0; i < 150; i++) {
         qtr.calibrate();
         
         // Print progress every 20 iterations

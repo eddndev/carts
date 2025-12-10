@@ -18,9 +18,11 @@ void LedController::showPing() {
 
 void LedController::update() {
     // Keep the PING frame for 200ms, then revert to IDLE
-    if (isAnimating && (millis() - lastAnimationTime > 200)) {
-        // matrix.loadFrame(FRAME_IDLE); // Don't revert to IDLE if we are streaming sensor data
-        isAnimating = false;
+    if (isAnimating && (millis() - lastAnimationTime > 2000)) {
+         // Auto-clear after 2 seconds only for PING. 
+         // For STOP/EXPLORE we might want to keep it?
+         // Let's assume the main loop calls 'showLine' which clears isAnimating
+         isAnimating = false;
     }
 }
 
@@ -91,4 +93,50 @@ void LedController::showLinePosition(uint16_t position) {
     }
     
     matrix.renderBitmap(frame, 8, 12);
+}
+
+
+void LedController::showStop() {
+    // Big X 
+    uint8_t frame[8][12] = {
+        {1,0,0,0,0,0,0,0,0,0,0,1},
+        {0,1,0,0,0,0,0,0,0,0,1,0},
+        {0,0,1,0,0,0,0,0,0,1,0,0},
+        {0,0,0,1,0,0,0,0,1,0,0,0},
+        {0,0,0,1,0,0,0,0,1,0,0,0},
+        {0,0,1,0,0,0,0,0,0,1,0,0},
+        {0,1,0,0,0,0,0,0,0,0,1,0},
+        {1,0,0,0,0,0,0,0,0,0,0,1}
+    };
+    matrix.renderBitmap(frame, 8, 12);
+    isAnimating = true;
+    lastAnimationTime = millis();
+}
+
+void LedController::showExplore() {
+    // WiFi / Radar Symbol
+    uint8_t frame[8][12] = {
+        {0,0,0,0,0,0,0,0,0,0,0,0},
+        {0,0,0,1,1,1,1,1,1,0,0,0},
+        {0,0,1,0,0,0,0,0,0,1,0,0},
+        {0,1,0,0,0,0,0,0,0,0,1,0},
+        {0,1,0,0,0,1,1,0,0,0,1,0},
+        {1,0,0,0,1,1,1,1,0,0,0,1},
+        {0,0,0,0,1,1,1,1,0,0,0,0},
+        {0,0,0,0,0,1,1,0,0,0,0,0}
+    };
+    matrix.renderBitmap(frame, 8, 12);
+    isAnimating = true;
+    lastAnimationTime = millis();
+}
+
+void LedController::showReset() {
+    // Full Fill
+    uint8_t frame[8][12];
+    for(int r=0; r<8; r++) {
+        for(int c=0; c<12; c++) frame[r][c] = 1;
+    }
+    matrix.renderBitmap(frame, 8, 12);
+    isAnimating = true;
+    lastAnimationTime = millis();
 }

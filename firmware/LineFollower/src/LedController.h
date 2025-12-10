@@ -14,6 +14,9 @@ public:
     void showSensorValues(uint16_t* values, uint8_t count); 
     void showCalibration(); // Animation during calibration
     void showLinePosition(uint16_t position); // Single dot moving
+    void showStop();
+    void showExplore();
+    void showReset();
 
 private:
     ArduinoLEDMatrix matrix;

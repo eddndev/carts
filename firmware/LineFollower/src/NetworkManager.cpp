@@ -38,10 +38,21 @@ void NetworkManager::begin() {
     Serial.println(SECRET_SSID);
     
     // Attempt to connect to WiFi network
+    // Attempt to connect to WiFi network
+    int attempts = 0;
     while (WiFi.status() != WL_CONNECTED) {
         WiFi.begin(SECRET_SSID, SECRET_PASS);
         Serial.print(".");
-        delay(5000);
+        // Check for connection every 500ms for 10 seconds, then try again
+        for(int i=0; i<20; i++) {
+             if (WiFi.status() == WL_CONNECTED) break;
+             delay(250); 
+        }
+        attempts++;
+        if (attempts > 5) {
+             Serial.println("WiFi Retry...");
+             // Maybe show error on LED?
+        }
     }
     Serial.println("\nConnected to WiFi");
 #endif

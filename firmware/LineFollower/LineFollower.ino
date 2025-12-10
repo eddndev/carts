@@ -56,42 +56,59 @@ void setup() {
   Serial.println("Calibration Complete.");
   
   // Wait 3 seconds before starting motors so user can place robot
+  // Wait 3 seconds before starting motors so user can place robot
   Serial.println("Get Ready! Starting in 3 seconds...");
+  led.showReset(); // Show "Filling" animation as readiness
   delay(3000);
   
   // Network initialization
-  network.begin();
+  Serial.println("Connecting to WiFi...");
+  led.showExplore(); // Show "Radar" while finding WiFi
+  network.begin(); // BLOCKING until connected
+  
+  led.showStop(); // Ready state (Motors 0)
 }
 
 void loop() {
   unsigned long currentMillis = millis();
 
-  // Update Network (receive packets)
+  // 1. Update Network
   network.update();
   
-  // Update LED animations
+  // 2. Update LED animations
   led.update();
   
-  // Check if we received a message
+  // 3. Handle Commands
   if (network.hasNewMessage()) {
       String msg = network.getLastMessage();
       Serial.println("Msg: " + msg);
       if (msg.startsWith("CMD:EXPLORE")) {
           navigator.startExploration();
+          led.showExplore();
       } else if (msg.startsWith("CMD:STOP")) {
           navigator.stop();
           motors.setSpeeds(0,0);
+          led.showStop();
+      } else if (msg.startsWith("CMD:RESET")) {
+          navigator.stop();
+          motors.setSpeeds(0,0);
+          led.showReset();
+          delay(1000); 
+          led.showStop();
       }
-      led.showPing();
   }
   
-  // --- SENSOR READING ---
+  // 4. Sensor Reading
   uint16_t position = sensors.readLine();
   LineSensor::SensorState sensorState = sensors.getState();
   bool isNode = (sensorState == LineSensor::STATE_NODE);
   bool isLine = (sensorState == LineSensor::STATE_LINE);
 
-  // --- DEBUG OUTPUT ---
+  // 5. Update Navigation Logic
+  navigator.update(isNode, isLine, currentMillis);
+  NavState state = navigator.getState();
+
+  // 6. Debug Output & Visual Feedback
   static unsigned long lastPrint = 0;
   if (millis() - lastPrint > 200) {
       lastPrint = millis();
@@ -107,16 +124,18 @@ void loop() {
           case LineSensor::STATE_NODE: Serial.println("NODE"); break;
           case LineSensor::STATE_COMPLEX: Serial.println("COMPLEX"); break;
       }
-      // Visual feedback
-      if (isNode) led.showPing();
-      else led.showLinePosition(position);
+      
+      // Update LED Matrix based on high-level state
+      if (state == NAV_FOLLOWING) {
+           led.showLinePosition(position);
+      } else if (isNode) {
+           led.showPing();
+      }
+      // Note: STOP/EXPLORE/RESET animations are triggered by commands and persist 
+      // until overridden or timeout, unless showLinePosition interrupts them.
   }
 
-  // --- NAVIGATION LOGIC ---
-  navigator.update(isNode, isLine, currentMillis);
-  NavState state = navigator.getState();
-
-  // --- MOTOR CONTROL ---
+  // 7. Motor Control
   if (state == NAV_IDLE) {
       motors.stop();
       
@@ -128,11 +147,10 @@ void loop() {
       if (dir == DIR_LEFT) {
           motors.setSpeeds(-TURN_SPEED, TURN_SPEED); 
       } else if (dir == DIR_RIGHT) {
-          motors.setSpeeds(TURN_SPEED, -TURN_SPEED);
+          motors.setSpeeds(TURN_SPEED, -TURN_SPEED); 
       }
       
   } else if (state == NAV_FOLLOWING) {
-      // PID Control
       int error = position - 2500; 
       int correction = pid.compute(error);
       
