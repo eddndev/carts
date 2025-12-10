@@ -11,6 +11,7 @@ public:
     void begin();
     void update(); // Call this in loop()
     bool sendPacket(const String& message);
+    bool respondToLastSender(const String& message);
     String getLastMessage();
     bool hasNewMessage();
 

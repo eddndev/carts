@@ -17,6 +17,7 @@ public:
     void showStop();
     void showExplore();
     void showReset();
+    void showPacketReceived();
 
 private:
     ArduinoLEDMatrix matrix;

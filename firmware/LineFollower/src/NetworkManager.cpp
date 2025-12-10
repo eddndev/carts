@@ -105,6 +105,16 @@ bool NetworkManager::sendPacket(const String& message) {
     return false;
 }
 
+bool NetworkManager::respondToLastSender(const String& message) {
+    // Reply directly to the device that sent the last packet
+    if (Udp.beginPacket(Udp.remoteIP(), Udp.remotePort()) == 1) {
+        Udp.write(message.c_str());
+        Udp.endPacket();
+        return true;
+    }
+    return false;
+}
+
 bool NetworkManager::hasNewMessage() {
     bool temp = newMessageAvailable;
     newMessageAvailable = false;

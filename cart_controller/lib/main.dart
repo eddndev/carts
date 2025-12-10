@@ -37,16 +37,17 @@ class ControllerPage extends StatefulWidget {
 
 class _ControllerPageState extends State<ControllerPage> with SingleTickerProviderStateMixin {
   // Configuration
-  final String robotIp = "192.168.4.1"; // Default Robot IP in AP mode
-  // If Client Mode (Robot connects to router), user can edit this
   final int robotPort = 4210;
 
   RawDatagramSocket? _socket;
   String _status = "Disconnected";
-  final TextEditingController _ipController = TextEditingController(text: "192.168.4.1");
+  final TextEditingController _ipController = TextEditingController(text: "");
   bool _isConnected = false;
   
-  // Animation for "Active" state
+  // Scanning
+  List<String> _foundDevices = [];
+  bool _isScanning = false;
+
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
 
@@ -54,13 +55,12 @@ class _ControllerPageState extends State<ControllerPage> with SingleTickerProvid
   void initState() {
     super.initState();
     _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 2),
-    )..repeat(reverse: true);
-    
+        vsync: this, duration: const Duration(seconds: 2))..repeat(reverse: true);
     _pulseAnimation = Tween<double>(begin: 1.0, end: 1.2).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut)
-    );
+        CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut));
+        
+    // Auto-init UDP
+    _connect(); 
   }
 
   @override
@@ -73,31 +73,167 @@ class _ControllerPageState extends State<ControllerPage> with SingleTickerProvid
 
   Future<void> _connect() async {
     try {
+      // Bind to any port to allow receiving responses
       _socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
+      _socket!.broadcastEnabled = true; // IMPORTANT for discovery
+      
+      _socket!.listen((RawSocketEvent e) {
+        if (e == RawSocketEvent.read) {
+          Datagram? d = _socket!.receive();
+          if (d != null) {
+            String msg = String.fromCharCodes(d.data);
+            String senderIp = d.address.address;
+            
+            if (msg.startsWith("ACK:")) {
+                // Found a device!
+                if (!_foundDevices.contains(senderIp)) {
+                    setState(() {
+                        _foundDevices.add(senderIp);
+                    });
+                }
+            }
+          }
+        }
+      });
+
       setState(() {
         _isConnected = true;
-        _status = "Ready to Command";
+        _status = "Ready. Scan or Enter IP.";
       });
-      // Try to send a ping or just assume generic UDP "connectionless" state
-      _showSnackbar("UDP Socket Initialized");
     } catch (e) {
       setState(() {
-        _status = "Error: $e";
+        _status = "Socket Error: $e";
         _isConnected = false;
       });
     }
   }
 
-  void _sendCommand(String cmd) {
-    if (_socket == null) {
-      _connect().then((_) => _sendInternally(cmd));
-      return;
+  void _startScan() async {
+    if (_socket == null) return;
+    
+    setState(() {
+        _foundDevices.clear();
+        _isScanning = true;
+        _status = "Scanning all networks...";
+    });
+    
+    // 1. Global Broadcast (255.255.255.255)
+    try {
+        _socket!.send("CMD:PING".codeUnits, InternetAddress("255.255.255.255"), robotPort);
+    } catch (e) {
+        print("Global broadcast error: $e");
     }
-    _sendInternally(cmd);
+
+    // 2. Targeted Broadcasts (Subnet specific)
+    try {
+        // Get all active network interfaces
+        List<NetworkInterface> interfaces = await NetworkInterface.list(
+            includeLoopback: false, 
+            type: InternetAddressType.IPv4
+        );
+
+        for (var interface in interfaces) {
+            for (var addr in interface.addresses) {
+                // Heuristic: Assume /24 subnet (Standard for Hotspots/Home WiFi)
+                // Transform x.x.x.y -> x.x.x.255
+                List<String> parts = addr.address.split('.');
+                if (parts.length == 4) {
+                    parts[3] = '255';
+                    String subnetBroadcast = parts.join('.');
+                    
+                    print("Broadcasting to subnet: $subnetBroadcast");
+                    try {
+                        _socket!.send("CMD:PING".codeUnits, InternetAddress(subnetBroadcast), robotPort);
+                    } catch (e) {
+                        print("Subnet send error: $e");
+                    }
+                }
+            }
+        }
+    } catch (e) {
+        print("Interface scan error: $e");
+    }
+
+    // Stop scanning after 3 seconds
+    Future.delayed(const Duration(seconds: 3), () {
+        if (mounted) {
+            setState(() {
+                _isScanning = false;
+                if (_foundDevices.isEmpty) _status = "No robots found. Check WiFi.";
+                else _status = "Found ${_foundDevices.length} robots.";
+            });
+            _showDeviceList();
+        }
+    });
+  }
+  
+  void _showDeviceList() {
+      showModalBottomSheet(
+          context: context,
+          backgroundColor: const Color(0xFF1E293B),
+          shape: const RoundedRectangleBorder(
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+          builder: (ctx) {
+              return StatefulBuilder(
+                  builder: (context, setSheetState) {
+                      return Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                  Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                          const Text("Available Robots", style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+                                          if (_isScanning) 
+                                              const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                                          else 
+                                              IconButton(
+                                                  icon: const Icon(Icons.refresh, color: Colors.cyanAccent),
+                                                  onPressed: () {
+                                                      Navigator.pop(ctx);
+                                                      _startScan();
+                                                  }
+                                              )
+                                      ],
+                                  ),
+                                  const SizedBox(height: 16),
+                                  if (_foundDevices.isEmpty) 
+                                      const Padding(
+                                          padding: EdgeInsets.symmetric(vertical: 20),
+                                          child: Text("No devices found via UDP Broadcast.\nEnsure all devices are on the same WiFi.", style: TextStyle(color: Colors.white54)),
+                                      ),
+                                  ..._foundDevices.map((ip) => ListTile(
+                                      leading: const Icon(Icons.smart_toy, color: Colors.cyanAccent),
+                                      title: Text("Robot ($ip)", style: const TextStyle(color: Colors.white)),
+                                      subtitle: const Text("Tap to Connect", style: TextStyle(color: Colors.white38)),
+                                      trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white24, size: 16),
+                                      onTap: () {
+                                          setState(() {
+                                              _ipController.text = ip;
+                                              _status = "Connected to $ip";
+                                          });
+                                          Navigator.pop(ctx);
+                                      },
+                                  )).toList()
+                              ],
+                          ),
+                      );
+                  }
+              );
+          }
+      );
   }
 
-  void _sendInternally(String cmd) {
+  void _sendCommand(String cmd) {
     if (_socket == null) return;
+    
+    // If IP is empty, prompt scan
+    if (_ipController.text.isEmpty) {
+        _startScan();
+        return;
+    }
     
     String targetIp = _ipController.text;
     try {
@@ -109,16 +245,11 @@ class _ControllerPageState extends State<ControllerPage> with SingleTickerProvid
       setState(() {
         _status = "Sent: $cmd";
       });
-      // Haptic feedback could go here
     } catch (e) {
       setState(() {
         _status = "Send Error: $e";
       });
     }
-  }
-  
-  void _showSnackbar(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   @override
@@ -147,7 +278,6 @@ class _ControllerPageState extends State<ControllerPage> with SingleTickerProvid
                 child: Column(
                   children: [
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Icon(Icons.wifi_tethering, color: Colors.cyanAccent),
                         Expanded(
@@ -157,20 +287,21 @@ class _ControllerPageState extends State<ControllerPage> with SingleTickerProvid
                               controller: _ipController,
                               style: const TextStyle(color: Colors.white, fontFamily: 'monospace'),
                               decoration: const InputDecoration(
-                                labelText: "Robot IP Address",
+                                labelText: "Target IP",
+                                hintText: "Select or Enter IP",
                                 border: InputBorder.none,
                                 isDense: true,
                               ),
                             ),
                           ),
                         ),
-                        _isConnected 
-                          ? const Icon(Icons.check_circle, color: Colors.greenAccent)
-                          : IconButton(
-                              icon: const Icon(Icons.refresh), 
-                              onPressed: _connect,
-                              tooltip: "Initialize UDP",
-                            )
+                        
+                        // SCAN BUTTON
+                        IconButton(
+                            icon: const Icon(Icons.radar, color: Colors.cyanAccent),
+                            onPressed: _startScan,
+                            tooltip: "Scan Devices",
+                        ),
                       ],
                     ),
                     const Divider(color: Colors.white24),
@@ -182,7 +313,6 @@ class _ControllerPageState extends State<ControllerPage> with SingleTickerProvid
               const Spacer(),
               
               // MAIN CONTROLS
-              // EXPLORE BUTTON (Big & Pulsing)
               Center(
                 child: GestureDetector(
                   onTap: () => _sendCommand("CMD:EXPLORE"),
@@ -249,7 +379,7 @@ class _ControllerPageState extends State<ControllerPage> with SingleTickerProvid
                       label: "RESET",
                       icon: Icons.refresh,
                       color: Colors.orangeAccent,
-                      onTap: () => _sendCommand("CMD:RESET"), // Assuming firmware supports this or ignores it
+                      onTap: () => _sendCommand("CMD:RESET"), 
                     ),
                   ),
                 ],

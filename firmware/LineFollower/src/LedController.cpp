@@ -140,3 +140,15 @@ void LedController::showReset() {
     isAnimating = true;
     lastAnimationTime = millis();
 }
+
+void LedController::showPacketReceived() {
+    // A small square or dot in the corner to indicate data
+    uint8_t frame[8][12] = {0};
+    // Draw a box in top right corner (Row 0, Col 10-11)
+    frame[0][10] = 1; frame[0][11] = 1;
+    frame[1][10] = 1; frame[1][11] = 1;
+    
+    matrix.renderBitmap(frame, 8, 12);
+    isAnimating = true;
+    lastAnimationTime = millis(); 
+}

@@ -80,6 +80,7 @@ void loop() {
   
   // 3. Handle Commands
   if (network.hasNewMessage()) {
+      led.showPacketReceived(); // Visual Flash
       String msg = network.getLastMessage();
       Serial.println("Msg: " + msg);
       if (msg.startsWith("CMD:EXPLORE")) {
@@ -95,6 +96,12 @@ void loop() {
           led.showReset();
           delay(1000); 
           led.showStop();
+          delay(1000); 
+          led.showStop();
+      } else if (msg.startsWith("CMD:PING")) {
+          // Reply with identity
+          network.respondToLastSender("ACK:CartFollower");
+          led.showPacketReceived(); 
       }
   }
   
