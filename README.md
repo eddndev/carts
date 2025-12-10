@@ -1,26 +1,36 @@
 
+![Arduino](https://img.shields.io/badge/-Arduino-00979D?style=for-the-badge&logo=Arduino&logoColor=white)
+![C++](https://img.shields.io/badge/-C++-00599C?style=for-the-badge&logo=c%2B%2B&logoColor=white)
+![Flutter](https://img.shields.io/badge/-Flutter-02569B?style=for-the-badge&logo=flutter&logoColor=white)
+![Dart](https://img.shields.io/badge/-Dart-0175C2?style=for-the-badge&logo=dart&logoColor=white)
+
 # WiFi Line Follower Carts
 
-Project for two Arduino Uno R4 WiFi based line-following carts with peer-to-peer communication.
+Project for two Arduino Uno R4 WiFi based line-following carts with peer-to-peer communication and a mobile control app.
 
 ## Structure
 
-- `firmware/` - Contains the Arduino source code.
-  - `LineFollower/` - Main firmware sketch.
-    - `src/` - Modular source files (classes/libraries local to the project).
-    - `LineFollower.ino` - Entry point.
-- `tools/` - (Optional) Scripts or extra tools.
+- `firmware/` - Arduino source code (C++).
+- `cart_controller/` - Mobile Control App (Flutter/Dart).
+- `tools/` - Extra scripts.
 
 ## Setup
 
-1. This project uses `arduino-cli` for management.
-2. Board: Arduino Uno R4 WiFi (`arduino:renesas_uno`).
+1. **Firmware**: Use `arduino-cli` with `arduino:renesas_uno`.
+2. **App**: Use `flutter run` in `cart_controller/`.
 
 ## Features
-- [x] **Line Following**: Robust PID control with deadband compensation and speed matching.
-- [x] **Sensor Calibration**: Auto-calibration routine with LED Matrix feedback.
-- [x] **WiFi Communication**: Basic P2P UDP packet sending.
-- [x] **Status Display**: Real-time line position and calibration status on LED Matrix.
+
+### 🤖 Robot Firmware
+- [x] **Line Following**: Robust PID control (Kp=0.09) with deadband compensation.
+- [x] **Auto-Calibration**: Sensor threshold detection with LED Matrix feedback.
+- [x] **P2P WiFi**: UDP communication mesh.
+- [x] **Visuals**: Real-time position tracking on LED Matrix.
+
+### 📱 Mobile Controller
+- [x] **UDP Discovery**: Auto-scans local subnet for active robots.
+- [x] **Remote Control**: Wireless commands (Explore, Stop, Reset).
+- [x] **Cyberpunk UI**: Reactive interface with haptic/visual feedback.
 
 ## Configuration (v1.0)
 - **Base Speed**: 90
