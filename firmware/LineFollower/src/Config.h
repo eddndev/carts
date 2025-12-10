@@ -10,8 +10,8 @@
 // WiFi Credentials
 // If IS_ACCESS_POINT is true: This device CREATES this network.
 // If IS_ACCESS_POINT is false: This device CONNECTS to this network.
-#define SECRET_SSID "YOUR_WIFI_NAME"
-#define SECRET_PASS "YOUR_WIFI_PASSWORD"
+#define SECRET_SSID "CartControl"
+#define SECRET_PASS "0102030405"
 
 // Communication
 #define UDP_PORT 4210
