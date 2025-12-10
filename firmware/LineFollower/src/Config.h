@@ -5,13 +5,13 @@
 
 // Set to true to make this device the Access Point (Host network)
 // Set to false to connect to an existing network (Client)
-#define IS_ACCESS_POINT true 
+#define IS_ACCESS_POINT false 
 
 // WiFi Credentials
 // If IS_ACCESS_POINT is true: This device CREATES this network.
 // If IS_ACCESS_POINT is false: This device CONNECTS to this network.
-#define SECRET_SSID "ArduinoCartNet"
-#define SECRET_PASS "cartpassword123"
+#define SECRET_SSID "YOUR_WIFI_NAME"
+#define SECRET_PASS "YOUR_WIFI_PASSWORD"
 
 // Communication
 #define UDP_PORT 4210
@@ -52,5 +52,16 @@ const uint8_t SENSOR_COUNT = 6;
 // Speed Matching Factors (0.0 to 1.0)
 #define SPEED_FACTOR_L 1.0
 #define SPEED_FACTOR_R 0.95
+
+// --- SONAR (HC-SR04) ---
+// LOGIC DISABLED IN MAIN LOOP, DEFINES KEPT FOR COMPILATION
+#define PIN_SONAR_TRIG      12 
+#define PIN_SONAR_ECHO      11 
+#define SONAR_MAX_DIST_CM   200
+#define OBSTACLE_DIST_CM    15 
+
+// --- NODE DETECTION ---
+#define NODE_THICKNESS_MS   100  // Time all sensors must be black to count as Node
+#define NODE_COOLDOWN_MS    1000 // Debounce time after leaving a node
 
 #endif

@@ -15,7 +15,10 @@
 #include "src/LedController.h"
 #include "src/LineSensor.h"
 #include "src/MotorController.h"
+#include "src/MotorController.h"
 #include "src/PIDController.h"
+#include "src/Navigator.h"
+// #include "src/Sonar.h"
 
 // Instantiate objects
 NetworkManager network;
@@ -23,6 +26,8 @@ LedController led;
 LineSensor sensors;
 MotorController motors;
 PIDController pid(PID_KP, PID_KI, PID_KD);
+Navigator navigator;
+// Sonar sonar;
 
 unsigned long lastPingTime = 0;
 const long interval = 2000; // Send ping every 2 seconds
@@ -39,6 +44,11 @@ void setup() {
   // Initialize Sensors
   sensors.begin();
   
+  // Initialize Navigator & Sonar
+  // Initialize Navigator
+  navigator.begin();
+  // sonar.begin();
+  
   // Calibration Sequence
   Serial.println("Starting Calibration...");
   led.showCalibration();
@@ -54,6 +64,8 @@ void setup() {
 }
 
 void loop() {
+  unsigned long currentMillis = millis();
+
   // Update Network (receive packets)
   network.update();
   
@@ -62,56 +74,76 @@ void loop() {
   
   // Check if we received a message
   if (network.hasNewMessage()) {
-      Serial.println("Action: Packet received!");
+      String msg = network.getLastMessage();
+      Serial.println("Msg: " + msg);
+      if (msg.startsWith("CMD:EXPLORE")) {
+          navigator.startExploration();
+      } else if (msg.startsWith("CMD:STOP")) {
+          navigator.stop();
+          motors.setSpeeds(0,0);
+      }
       led.showPing();
   }
   
-  // Read Line Position
+  // --- SENSOR READING ---
   uint16_t position = sensors.readLine();
-  
-  // Visualize Position on Matrix
-  led.showLinePosition(position);
-  
-  // --- PID CONTROL ---
-  int error = position - 2500; // 0-5000 -> -2500 to 2500
-  int correction = pid.compute(error);
-  
-  // Inverted steering signs based on user report:
-  // Line Right -> Turn Right -> Needs Right Loop Correction
-  int leftSpeed = BASE_SPEED - correction;
-  int rightSpeed = BASE_SPEED + correction;
-  
-  // Constrain speeds
-  leftSpeed = constrain(leftSpeed, -MAX_SPEED, MAX_SPEED);
-  rightSpeed = constrain(rightSpeed, -MAX_SPEED, MAX_SPEED);
-  
-  // Apply to motors
-  // Apply to motors
-  motors.setSpeeds(leftSpeed, rightSpeed); // ENABLE MOVEMENT
+  LineSensor::SensorState sensorState = sensors.getState();
+  bool isNode = (sensorState == LineSensor::STATE_NODE);
+  bool isLine = (sensorState == LineSensor::STATE_LINE);
 
-  // Debug print periodically
+  // --- DEBUG OUTPUT ---
   static unsigned long lastPrint = 0;
-  if (millis() - lastPrint > 200) { // Fast frequency (200ms) for tuning
+  if (millis() - lastPrint > 200) {
       lastPrint = millis();
-      Serial.print("Pos: ");
-      Serial.print(position);
-      Serial.print(" Err: ");
-      Serial.print(error);
-      Serial.print(" Corr: ");
-      Serial.print(correction);
-      Serial.print(" L: ");
-      Serial.print(leftSpeed);
-      Serial.print(" R: ");
-      Serial.println(rightSpeed);
+      Serial.print("SENSORS: [");
+      uint16_t* raw = sensors.getRawValues();
+      for(int i=0; i<6; i++) {
+          Serial.print(raw[i] > 600 ? "X" : "_"); 
+      }
+      Serial.print("] STATE: ");
+      switch(sensorState) {
+          case LineSensor::STATE_GAP: Serial.println("GAP"); break;
+          case LineSensor::STATE_LINE: Serial.println("LINE"); break;
+          case LineSensor::STATE_NODE: Serial.println("NODE"); break;
+          case LineSensor::STATE_COMPLEX: Serial.println("COMPLEX"); break;
+      }
+      // Visual feedback
+      if (isNode) led.showPing();
+      else led.showLinePosition(position);
   }
 
-  // Send "Ping" periodically
-  unsigned long currentMillis = millis();
-  if (currentMillis - lastPingTime >= interval) {
-      lastPingTime = currentMillis;
-      String pingMsg = "PING from " + String(WiFi.localIP()[3]); // Send last octet of IP
-      network.sendPacket(pingMsg);
+  // --- NAVIGATION LOGIC ---
+  navigator.update(isNode, isLine, currentMillis);
+  NavState state = navigator.getState();
+
+  // --- MOTOR CONTROL ---
+  if (state == NAV_IDLE) {
+      motors.stop();
+      
+  } else if (state == NAV_AT_NODE) {
+      motors.stop(); 
+      
+  } else if (state == NAV_TURNING) {
+      Direction dir = navigator.getTurnDirection();
+      if (dir == DIR_LEFT) {
+          motors.setSpeeds(-TURN_SPEED, TURN_SPEED); 
+      } else if (dir == DIR_RIGHT) {
+          motors.setSpeeds(TURN_SPEED, -TURN_SPEED);
+      }
+      
+  } else if (state == NAV_FOLLOWING) {
+      // PID Control
+      int error = position - 2500; 
+      int correction = pid.compute(error);
+      
+      int leftSpeed = BASE_SPEED - correction;
+      int rightSpeed = BASE_SPEED + correction;
+      
+      leftSpeed = constrain(leftSpeed, -MAX_SPEED, MAX_SPEED);
+      rightSpeed = constrain(rightSpeed, -MAX_SPEED, MAX_SPEED);
+      
+      motors.setSpeeds(leftSpeed, rightSpeed);
   }
-  
-  delay(1); // Minimize delay for loop speed
+
+  delay(1);
 }

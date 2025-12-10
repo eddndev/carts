@@ -14,8 +14,6 @@ void LineSensor::begin() {
 void LineSensor::calibrate() {
     Serial.println("Calibrating sensors... Move sensor over line!");
     
-    // Calibrate for approx 5 seconds (200 * 25ms?) no, just loops
-    // usually 400 iterations is good
     // Calibrate for approx 2-3 seconds (400 iters)
     for (uint16_t i = 0; i < 400; i++) {
         qtr.calibrate();
@@ -34,4 +32,43 @@ uint16_t* LineSensor::getRawValues() {
     // Just read raw without position calculation for debugging
     qtr.read(trustedSensorValues);
     return trustedSensorValues;
+}
+
+bool LineSensor::isNodeDetected() {
+    return (getState() == STATE_NODE);
+}
+
+LineSensor::SensorState LineSensor::getState() {
+    // 1. Count black sensors (threshold > 600)
+    int blackCount = 0;
+    bool sensorIsBlack[SENSOR_COUNT];
+    
+    for (uint8_t i = 0; i < SENSOR_COUNT; i++) {
+        sensorIsBlack[i] = (trustedSensorValues[i] > 600);
+        if (sensorIsBlack[i]) blackCount++;
+    }
+
+    // 2. Identify State
+    if (blackCount == 0) return STATE_GAP;
+    if (blackCount >= 5) return STATE_NODE; // 5 or 6 sensors black -> Node
+
+    // 3. Check for Bifurcations (Segments)
+    // A segment is a continuous block of black sensors.
+    // "Black-Black-White-Black" -> 2 segments
+    int segments = 0;
+    bool inSegment = false;
+    for (uint8_t i = 0; i < SENSOR_COUNT; i++) {
+        if (sensorIsBlack[i]) {
+            if (!inSegment) {
+                segments++;
+                inSegment = true;
+            }
+        } else {
+            inSegment = false;
+        }
+    }
+
+    if (segments > 1) return STATE_COMPLEX; // Disconnected lines found
+
+    return STATE_LINE; // Default single segment
 }
