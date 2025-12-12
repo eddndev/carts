@@ -48,6 +48,12 @@ class _ControllerPageState extends State<ControllerPage> with SingleTickerProvid
   List<String> _foundDevices = [];
   bool _isScanning = false;
 
+  // DFS Exploration State
+  int _nodeCount = 0;
+  List<String> _directionStack = []; // Stack for backtracking
+  String _lastDecision = "";
+  bool _isExploring = false;
+
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
 
@@ -84,13 +90,18 @@ class _ControllerPageState extends State<ControllerPage> with SingleTickerProvid
             String msg = String.fromCharCodes(d.data);
             String senderIp = d.address.address;
             
+            // ACK for discovery
             if (msg.startsWith("ACK:")) {
-                // Found a device!
                 if (!_foundDevices.contains(senderIp)) {
                     setState(() {
                         _foundDevices.add(senderIp);
                     });
                 }
+            }
+            
+            // Telemetry JSON from robot (Hybrid Arch)
+            if (msg.startsWith("{")) {
+                _handleTelemetry(msg, senderIp);
             }
           }
         }
@@ -105,6 +116,63 @@ class _ControllerPageState extends State<ControllerPage> with SingleTickerProvid
         _status = "Socket Error: $e";
         _isConnected = false;
       });
+    }
+  }
+  
+  // --- DFS EXPLORATION LOGIC --- 
+  void _handleTelemetry(String json, String senderIp) {
+    // Simple JSON parsing (format: {"s":state, "v":sensors, "d":dist})
+    // State 4 = NAV_WAITING_HOST (from Navigator.h enum)
+    try {
+      // Extract state value
+      RegExp stateRegex = RegExp(r'"s":(\d+)');
+      var match = stateRegex.firstMatch(json);
+      if (match != null) {
+        int robotState = int.parse(match.group(1)!);
+        
+        // NAV_WAITING_HOST = 4 (from enum)
+        if (robotState == 4 && _isExploring) {
+          _nodeCount++;
+          String decision = _dfsDecide();
+          _sendNavCommand(decision, senderIp);
+          
+          setState(() {
+            _lastDecision = decision;
+            _status = "Node $_nodeCount: $decision";
+          });
+        }
+      }
+    } catch (e) {
+      print("Telemetry parse error: $e");
+    }
+  }
+  
+  String _dfsDecide() {
+    // Right-Hand Rule for maze exploration
+    // Priority: RIGHT -> STRAIGHT -> LEFT -> BACK
+    // For simplicity, we cycle through decisions
+    // A real implementation would track visited edges
+    
+    List<String> options = ["GO_RIGHT", "GO_STRAIGHT", "GO_LEFT"];
+    
+    // Simple heuristic: alternate to explore
+    String choice = options[_nodeCount % options.length];
+    
+    // Track for backtracking
+    _directionStack.add(choice);
+    
+    return choice;
+  }
+  
+  void _sendNavCommand(String decision, String targetIp) {
+    if (_socket == null) return;
+    
+    String cmd = "NAV:$decision";
+    try {
+      _socket!.send(cmd.codeUnits, InternetAddress(targetIp), robotPort);
+      print("Sent: $cmd to $targetIp");
+    } catch (e) {
+      print("Nav send error: $e");
     }
   }
 
@@ -315,7 +383,14 @@ class _ControllerPageState extends State<ControllerPage> with SingleTickerProvid
               // MAIN CONTROLS
               Center(
                 child: GestureDetector(
-                  onTap: () => _sendCommand("CMD:EXPLORE"),
+                  onTap: () {
+                    setState(() {
+                      _isExploring = true;
+                      _nodeCount = 0;
+                      _directionStack.clear();
+                    });
+                    _sendCommand("CMD:EXPLORE");
+                  },
                   child: ScaleTransition(
                     scale: _isConnected ? _pulseAnimation : const AlwaysStoppedAnimation(1.0),
                     child: Container(
@@ -327,14 +402,23 @@ class _ControllerPageState extends State<ControllerPage> with SingleTickerProvid
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                           colors: [
-                            Colors.cyanAccent.withOpacity(0.2),
+                            _isExploring 
+                              ? Colors.greenAccent.withOpacity(0.3)
+                              : Colors.cyanAccent.withOpacity(0.2),
                             Colors.blueAccent.withOpacity(0.1),
                           ],
                         ),
-                        border: Border.all(color: Colors.cyanAccent.withOpacity(0.5), width: 2),
+                        border: Border.all(
+                          color: _isExploring 
+                            ? Colors.greenAccent.withOpacity(0.7) 
+                            : Colors.cyanAccent.withOpacity(0.5), 
+                          width: 2
+                        ),
                         boxShadow: [
                             BoxShadow(
-                                color: Colors.cyanAccent.withOpacity(0.2),
+                                color: _isExploring 
+                                  ? Colors.greenAccent.withOpacity(0.3)
+                                  : Colors.cyanAccent.withOpacity(0.2),
                                 blurRadius: 30,
                                 spreadRadius: 5
                             )
@@ -342,17 +426,29 @@ class _ControllerPageState extends State<ControllerPage> with SingleTickerProvid
                       ),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
-                        children: const [
-                          Icon(Icons.rocket_launch, size: 64, color: Colors.white),
-                          SizedBox(height: 16),
-                          Text("EXPLORE", 
-                            style: TextStyle(
+                        children: [
+                          Icon(
+                            _isExploring ? Icons.explore : Icons.rocket_launch, 
+                            size: 64, 
+                            color: Colors.white
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            _isExploring ? "EXPLORING..." : "EXPLORE", 
+                            style: const TextStyle(
                               color: Colors.white, 
-                              fontSize: 32, 
+                              fontSize: 28, 
                               fontWeight: FontWeight.bold,
                               letterSpacing: 2
                             )
                           ),
+                          if (_isExploring) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              "Nodes: $_nodeCount",
+                              style: TextStyle(color: Colors.white70, fontSize: 14)
+                            ),
+                          ]
                         ],
                       ),
                     ),
@@ -370,7 +466,10 @@ class _ControllerPageState extends State<ControllerPage> with SingleTickerProvid
                       label: "STOP",
                       icon: Icons.stop_circle_outlined,
                       color: Colors.redAccent,
-                      onTap: () => _sendCommand("CMD:STOP"),
+                      onTap: () {
+                        setState(() => _isExploring = false);
+                        _sendCommand("CMD:STOP");
+                      },
                     ),
                   ),
                   const SizedBox(width: 16),
