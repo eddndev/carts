@@ -36,16 +36,17 @@ public:
               unsigned long currentMillis);
 
   void startExploration();
+  void stop();
+
   NavState getState();
   Direction getTurnDirection(); // To tell MotorController which way to spin
 
   // Command Interface
+  void processExternalCommand(String cmd); // Hybrid Arch Input
 
-  // Command Interface
   void turnLeft();
   void turnRight();
   void goStraight();
-  void stop();
 
 private:
   NavState currentState;
