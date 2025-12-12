@@ -1,5 +1,16 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
+
+// Services
+import 'services/udp_service.dart';
+import 'services/dfs_explorer.dart';
+
+// Widgets
+import 'widgets/control_button.dart';
+import 'widgets/explore_button.dart';
+import 'widgets/connection_card.dart';
+
+// Pages
+import 'pages/test_page.dart';
 
 void main() {
   runApp(const RobotControllerApp());
@@ -36,23 +47,15 @@ class ControllerPage extends StatefulWidget {
 }
 
 class _ControllerPageState extends State<ControllerPage> with SingleTickerProviderStateMixin {
-  // Configuration
-  final int robotPort = 4210;
-
-  RawDatagramSocket? _socket;
-  String _status = "Disconnected";
-  final TextEditingController _ipController = TextEditingController(text: "");
-  bool _isConnected = false;
+  // Services
+  late UdpService _udpService;
+  final DfsExplorer _dfsExplorer = DfsExplorer();
   
-  // Scanning
+  // UI State
+  final TextEditingController _ipController = TextEditingController();
+  String _status = "Disconnected";
   List<String> _foundDevices = [];
   bool _isScanning = false;
-
-  // DFS Exploration State
-  int _nodeCount = 0;
-  List<String> _directionStack = []; // Stack for backtracking
-  String _lastDecision = "";
-  bool _isExploring = false;
 
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
@@ -60,85 +63,67 @@ class _ControllerPageState extends State<ControllerPage> with SingleTickerProvid
   @override
   void initState() {
     super.initState();
+    
     _pulseController = AnimationController(
-        vsync: this, duration: const Duration(seconds: 2))..repeat(reverse: true);
+      vsync: this, 
+      duration: const Duration(seconds: 2)
+    )..repeat(reverse: true);
+    
     _pulseAnimation = Tween<double>(begin: 1.0, end: 1.2).animate(
-        CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut));
-        
-    // Auto-init UDP
-    _connect(); 
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut)
+    );
+    
+    // Initialize UDP Service with message handler
+    _udpService = UdpService(
+      onMessage: _handleMessage,
+    );
+    
+    _connect();
   }
 
   @override
   void dispose() {
-    _socket?.close();
+    _udpService.disconnect();
     _pulseController.dispose();
     _ipController.dispose();
     super.dispose();
   }
 
   Future<void> _connect() async {
-    try {
-      // Bind to any port to allow receiving responses
-      _socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
-      _socket!.broadcastEnabled = true; // IMPORTANT for discovery
-      
-      _socket!.listen((RawSocketEvent e) {
-        if (e == RawSocketEvent.read) {
-          Datagram? d = _socket!.receive();
-          if (d != null) {
-            String msg = String.fromCharCodes(d.data);
-            String senderIp = d.address.address;
-            
-            // ACK for discovery
-            if (msg.startsWith("ACK:")) {
-                if (!_foundDevices.contains(senderIp)) {
-                    setState(() {
-                        _foundDevices.add(senderIp);
-                    });
-                }
-            }
-            
-            // Telemetry JSON from robot (Hybrid Arch)
-            if (msg.startsWith("{")) {
-                _handleTelemetry(msg, senderIp);
-            }
-          }
-        }
-      });
-
-      setState(() {
-        _isConnected = true;
-        _status = "Ready. Scan or Enter IP.";
-      });
-    } catch (e) {
-      setState(() {
-        _status = "Socket Error: $e";
-        _isConnected = false;
-      });
+    bool success = await _udpService.connect();
+    setState(() {
+      _status = success ? "Ready. Scan or Enter IP." : "Connection failed";
+    });
+  }
+  
+  void _handleMessage(String msg, String senderIp) {
+    // ACK for discovery
+    if (msg.startsWith("ACK:")) {
+      if (!_foundDevices.contains(senderIp)) {
+        setState(() => _foundDevices.add(senderIp));
+      }
+    }
+    
+    // Telemetry JSON from robot (Hybrid Arch)
+    if (msg.startsWith("{")) {
+      _handleTelemetry(msg, senderIp);
     }
   }
   
-  // --- DFS EXPLORATION LOGIC --- 
   void _handleTelemetry(String json, String senderIp) {
-    // Simple JSON parsing (format: {"s":state, "v":sensors, "d":dist})
-    // State 4 = NAV_WAITING_HOST (from Navigator.h enum)
     try {
-      // Extract state value
       RegExp stateRegex = RegExp(r'"s":(\d+)');
       var match = stateRegex.firstMatch(json);
       if (match != null) {
         int robotState = int.parse(match.group(1)!);
         
-        // NAV_WAITING_HOST = 4 (from enum)
-        if (robotState == 4 && _isExploring) {
-          _nodeCount++;
-          String decision = _dfsDecide();
-          _sendNavCommand(decision, senderIp);
+        // NAV_WAITING_HOST = 4
+        if (robotState == 4 && _dfsExplorer.isExploring) {
+          String decision = _dfsExplorer.decide();
+          _udpService.sendCommand("NAV:$decision", senderIp);
           
           setState(() {
-            _lastDecision = decision;
-            _status = "Node $_nodeCount: $decision";
+            _status = "Node ${_dfsExplorer.nodeCount}: $decision";
           });
         }
       }
@@ -146,185 +131,116 @@ class _ControllerPageState extends State<ControllerPage> with SingleTickerProvid
       print("Telemetry parse error: $e");
     }
   }
-  
-  String _dfsDecide() {
-    // Right-Hand Rule for maze exploration
-    // Priority: RIGHT -> STRAIGHT -> LEFT -> BACK
-    // For simplicity, we cycle through decisions
-    // A real implementation would track visited edges
-    
-    List<String> options = ["GO_RIGHT", "GO_STRAIGHT", "GO_LEFT"];
-    
-    // Simple heuristic: alternate to explore
-    String choice = options[_nodeCount % options.length];
-    
-    // Track for backtracking
-    _directionStack.add(choice);
-    
-    return choice;
-  }
-  
-  void _sendNavCommand(String decision, String targetIp) {
-    if (_socket == null) return;
-    
-    String cmd = "NAV:$decision";
-    try {
-      _socket!.send(cmd.codeUnits, InternetAddress(targetIp), robotPort);
-      print("Sent: $cmd to $targetIp");
-    } catch (e) {
-      print("Nav send error: $e");
-    }
-  }
 
   void _startScan() async {
-    if (_socket == null) return;
-    
     setState(() {
-        _foundDevices.clear();
-        _isScanning = true;
-        _status = "Scanning all networks...";
+      _foundDevices.clear();
+      _isScanning = true;
+      _status = "Scanning...";
     });
     
-    // 1. Global Broadcast (255.255.255.255)
-    try {
-        _socket!.send("CMD:PING".codeUnits, InternetAddress("255.255.255.255"), robotPort);
-    } catch (e) {
-        print("Global broadcast error: $e");
-    }
-
-    // 2. Targeted Broadcasts (Subnet specific)
-    try {
-        // Get all active network interfaces
-        List<NetworkInterface> interfaces = await NetworkInterface.list(
-            includeLoopback: false, 
-            type: InternetAddressType.IPv4
-        );
-
-        for (var interface in interfaces) {
-            for (var addr in interface.addresses) {
-                // Heuristic: Assume /24 subnet (Standard for Hotspots/Home WiFi)
-                // Transform x.x.x.y -> x.x.x.255
-                List<String> parts = addr.address.split('.');
-                if (parts.length == 4) {
-                    parts[3] = '255';
-                    String subnetBroadcast = parts.join('.');
-                    
-                    print("Broadcasting to subnet: $subnetBroadcast");
-                    try {
-                        _socket!.send("CMD:PING".codeUnits, InternetAddress(subnetBroadcast), robotPort);
-                    } catch (e) {
-                        print("Subnet send error: $e");
-                    }
-                }
-            }
-        }
-    } catch (e) {
-        print("Interface scan error: $e");
-    }
-
-    // Stop scanning after 3 seconds
+    await _udpService.scanSubnets();
+    
     Future.delayed(const Duration(seconds: 3), () {
-        if (mounted) {
-            setState(() {
-                _isScanning = false;
-                if (_foundDevices.isEmpty) _status = "No robots found. Check WiFi.";
-                else _status = "Found ${_foundDevices.length} robots.";
-            });
-            _showDeviceList();
-        }
+      if (mounted) {
+        setState(() {
+          _isScanning = false;
+          _status = _foundDevices.isEmpty 
+            ? "No robots found." 
+            : "Found ${_foundDevices.length} robots.";
+        });
+        _showDeviceList();
+      }
     });
   }
   
   void _showDeviceList() {
-      showModalBottomSheet(
-          context: context,
-          backgroundColor: const Color(0xFF1E293B),
-          shape: const RoundedRectangleBorder(
-              borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-          builder: (ctx) {
-              return StatefulBuilder(
-                  builder: (context, setSheetState) {
-                      return Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                  Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                          const Text("Available Robots", style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-                                          if (_isScanning) 
-                                              const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                                          else 
-                                              IconButton(
-                                                  icon: const Icon(Icons.refresh, color: Colors.cyanAccent),
-                                                  onPressed: () {
-                                                      Navigator.pop(ctx);
-                                                      _startScan();
-                                                  }
-                                              )
-                                      ],
-                                  ),
-                                  const SizedBox(height: 16),
-                                  if (_foundDevices.isEmpty) 
-                                      const Padding(
-                                          padding: EdgeInsets.symmetric(vertical: 20),
-                                          child: Text("No devices found via UDP Broadcast.\nEnsure all devices are on the same WiFi.", style: TextStyle(color: Colors.white54)),
-                                      ),
-                                  ..._foundDevices.map((ip) => ListTile(
-                                      leading: const Icon(Icons.smart_toy, color: Colors.cyanAccent),
-                                      title: Text("Robot ($ip)", style: const TextStyle(color: Colors.white)),
-                                      subtitle: const Text("Tap to Connect", style: TextStyle(color: Colors.white38)),
-                                      trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white24, size: 16),
-                                      onTap: () {
-                                          setState(() {
-                                              _ipController.text = ip;
-                                              _status = "Connected to $ip";
-                                          });
-                                          Navigator.pop(ctx);
-                                      },
-                                  )).toList()
-                              ],
-                          ),
-                      );
-                  }
-              );
-          }
-      );
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1E293B),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20))
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text("Available Robots", 
+                  style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)
+                ),
+                if (_isScanning) 
+                  const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                else 
+                  IconButton(
+                    icon: const Icon(Icons.refresh, color: Colors.cyanAccent),
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _startScan();
+                    }
+                  )
+              ],
+            ),
+            const SizedBox(height: 16),
+            if (_foundDevices.isEmpty) 
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 20),
+                child: Text("No devices found.", style: TextStyle(color: Colors.white54)),
+              ),
+            ..._foundDevices.map((ip) => ListTile(
+              leading: const Icon(Icons.smart_toy, color: Colors.cyanAccent),
+              title: Text("Robot ($ip)", style: const TextStyle(color: Colors.white)),
+              subtitle: const Text("Tap to Connect", style: TextStyle(color: Colors.white38)),
+              trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white24, size: 16),
+              onTap: () {
+                setState(() {
+                  _ipController.text = ip;
+                  _status = "Connected to $ip";
+                });
+                Navigator.pop(ctx);
+              },
+            )),
+          ],
+        ),
+      ),
+    );
   }
 
   void _sendCommand(String cmd) {
-    if (_socket == null) return;
-    
-    // If IP is empty, prompt scan
     if (_ipController.text.isEmpty) {
-        _startScan();
-        return;
+      _startScan();
+      return;
     }
     
-    String targetIp = _ipController.text;
-    try {
-      _socket!.send(
-        cmd.codeUnits, 
-        InternetAddress(targetIp), 
-        robotPort
-      );
-      setState(() {
-        _status = "Sent: $cmd";
-      });
-    } catch (e) {
-      setState(() {
-        _status = "Send Error: $e";
-      });
-    }
+    bool success = _udpService.sendCommand(cmd, _ipController.text);
+    setState(() {
+      _status = success ? "Sent: $cmd" : "Send failed";
+    });
+  }
+  
+  void _startExploration() {
+    _dfsExplorer.start();
+    _sendCommand("CMD:EXPLORE");
+    setState(() {});
+  }
+  
+  void _stopExploration() {
+    _dfsExplorer.stop();
+    _sendCommand("CMD:STOP");
+    setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("ANTIGRAVITY CONTROL", style: TextStyle(letterSpacing: 2, fontWeight: FontWeight.bold)),
+        title: const Text("ANTIGRAVITY CONTROL", 
+          style: TextStyle(letterSpacing: 2, fontWeight: FontWeight.bold)
+        ),
         centerTitle: true,
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -335,150 +251,68 @@ class _ControllerPageState extends State<ControllerPage> with SingleTickerProvid
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Connection Status Card
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.05),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.white.withOpacity(0.1)),
-                ),
-                child: Column(
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.wifi_tethering, color: Colors.cyanAccent),
-                        Expanded(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            child: TextField(
-                              controller: _ipController,
-                              style: const TextStyle(color: Colors.white, fontFamily: 'monospace'),
-                              decoration: const InputDecoration(
-                                labelText: "Target IP",
-                                hintText: "Select or Enter IP",
-                                border: InputBorder.none,
-                                isDense: true,
-                              ),
-                            ),
-                          ),
-                        ),
-                        
-                        // SCAN BUTTON
-                        IconButton(
-                            icon: const Icon(Icons.radar, color: Colors.cyanAccent),
-                            onPressed: _startScan,
-                            tooltip: "Scan Devices",
-                        ),
-                      ],
-                    ),
-                    const Divider(color: Colors.white24),
-                    Text(_status, style: const TextStyle(color: Colors.white54, fontSize: 12)),
-                  ],
-                ),
+              // Connection Card
+              ConnectionCard(
+                ipController: _ipController,
+                status: _status,
+                onScan: _startScan,
               ),
               
               const Spacer(),
               
-              // MAIN CONTROLS
+              // Explore Button
               Center(
-                child: GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _isExploring = true;
-                      _nodeCount = 0;
-                      _directionStack.clear();
-                    });
-                    _sendCommand("CMD:EXPLORE");
-                  },
-                  child: ScaleTransition(
-                    scale: _isConnected ? _pulseAnimation : const AlwaysStoppedAnimation(1.0),
-                    child: Container(
-                      width: 280,
-                      height: 280,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            _isExploring 
-                              ? Colors.greenAccent.withOpacity(0.3)
-                              : Colors.cyanAccent.withOpacity(0.2),
-                            Colors.blueAccent.withOpacity(0.1),
-                          ],
-                        ),
-                        border: Border.all(
-                          color: _isExploring 
-                            ? Colors.greenAccent.withOpacity(0.7) 
-                            : Colors.cyanAccent.withOpacity(0.5), 
-                          width: 2
-                        ),
-                        boxShadow: [
-                            BoxShadow(
-                                color: _isExploring 
-                                  ? Colors.greenAccent.withOpacity(0.3)
-                                  : Colors.cyanAccent.withOpacity(0.2),
-                                blurRadius: 30,
-                                spreadRadius: 5
-                            )
-                        ],
-                      ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            _isExploring ? Icons.explore : Icons.rocket_launch, 
-                            size: 64, 
-                            color: Colors.white
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            _isExploring ? "EXPLORING..." : "EXPLORE", 
-                            style: const TextStyle(
-                              color: Colors.white, 
-                              fontSize: 28, 
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 2
-                            )
-                          ),
-                          if (_isExploring) ...[
-                            const SizedBox(height: 8),
-                            Text(
-                              "Nodes: $_nodeCount",
-                              style: TextStyle(color: Colors.white70, fontSize: 14)
-                            ),
-                          ]
-                        ],
-                      ),
-                    ),
-                  ),
+                child: ExploreButton(
+                  isExploring: _dfsExplorer.isExploring,
+                  nodeCount: _dfsExplorer.nodeCount,
+                  pulseAnimation: _pulseAnimation,
+                  onTap: _startExploration,
                 ),
               ),
               
               const Spacer(),
               
-              // STOP & RESET ROW
+              // Control Buttons Row
               Row(
                 children: [
-                   Expanded(
-                    child: _ControlBtn(
+                  Expanded(
+                    child: ControlButton(
                       label: "STOP",
                       icon: Icons.stop_circle_outlined,
                       color: Colors.redAccent,
+                      onTap: _stopExploration,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ControlButton(
+                      label: "TEST",
+                      icon: Icons.build_outlined,
+                      color: Colors.orange,
                       onTap: () {
-                        setState(() => _isExploring = false);
-                        _sendCommand("CMD:STOP");
+                        if (_ipController.text.isEmpty) {
+                          _startScan();
+                          return;
+                        }
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => TestPage(
+                              udpService: _udpService,
+                              targetIp: _ipController.text,
+                            ),
+                          ),
+                        );
                       },
                     ),
                   ),
-                  const SizedBox(width: 16),
+                  const SizedBox(width: 12),
                   Expanded(
-                    child: _ControlBtn(
+                    child: ControlButton(
                       label: "RESET",
                       icon: Icons.refresh,
-                      color: Colors.orangeAccent,
-                      onTap: () => _sendCommand("CMD:RESET"), 
+                      color: Colors.amber,
+                      onTap: () => _sendCommand("CMD:RESET"),
                     ),
                   ),
                 ],
@@ -487,36 +321,6 @@ class _ControllerPageState extends State<ControllerPage> with SingleTickerProvid
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _ControlBtn extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _ControlBtn({required this.label, required this.icon, required this.color, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return ElevatedButton(
-      onPressed: onTap,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: color.withOpacity(0.2),
-        foregroundColor: color,
-        padding: const EdgeInsets.symmetric(vertical: 24),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        side: BorderSide(color: color.withOpacity(0.5)),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, size: 32),
-          const SizedBox(height: 8),
-          Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
-        ],
       ),
     );
   }
