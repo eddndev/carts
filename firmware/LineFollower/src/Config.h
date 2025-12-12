@@ -1,6 +1,8 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+#include <Arduino.h>
+
 // --- Network Configuration ---
 
 // Set to true to make this device the Access Point (Host network)
