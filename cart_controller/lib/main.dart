@@ -186,12 +186,19 @@ class _ControllerPageState extends State<ControllerPage> with SingleTickerProvid
               ],
             ),
             const SizedBox(height: 16),
-            if (_foundDevices.isEmpty) 
+            if (_foundDevices.isEmpty && _ipController.text.isEmpty) 
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 20),
                 child: Text("No devices found.", style: TextStyle(color: Colors.white54)),
               ),
-            ..._foundDevices.map((ip) => ListTile(
+            // Show currently connected device if any
+            if (_ipController.text.isNotEmpty)
+              ListTile(
+                leading: const Icon(Icons.check_circle, color: Colors.greenAccent),
+                title: Text("Connected (${_ipController.text})", style: const TextStyle(color: Colors.greenAccent)),
+                subtitle: const Text("Current target", style: TextStyle(color: Colors.white38)),
+              ),
+            ..._foundDevices.where((ip) => ip != _ipController.text).map((ip) => ListTile(
               leading: const Icon(Icons.smart_toy, color: Colors.cyanAccent),
               title: Text("Robot ($ip)", style: const TextStyle(color: Colors.white)),
               subtitle: const Text("Tap to Connect", style: TextStyle(color: Colors.white38)),
@@ -247,7 +254,7 @@ class _ControllerPageState extends State<ControllerPage> with SingleTickerProvid
       ),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(24.0),
+          padding: EdgeInsets.fromLTRB(24, 24, 24, 24 + MediaQuery.of(context).padding.bottom),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [

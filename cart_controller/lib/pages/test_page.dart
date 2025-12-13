@@ -18,13 +18,26 @@ class TestPage extends StatefulWidget {
 
 class _TestPageState extends State<TestPage> {
   final List<String> _logs = [];
-  String _lastTelemetry = "";
   
   @override
   void initState() {
     super.initState();
     _addLog("Test Mode Started");
     _addLog("Target: ${widget.targetIp}");
+    
+    // Listen for Arduino responses
+    widget.udpService.onMessage = (msg, senderIp) {
+      if (senderIp == widget.targetIp) {
+        _addLog("📥 $msg");
+      }
+    };
+  }
+  
+  @override
+  void dispose() {
+    // Restore original handler (or set to null)
+    widget.udpService.onMessage = null;
+    super.dispose();
   }
   
   void _addLog(String msg) {

@@ -4,7 +4,7 @@ import 'dart:io';
 class UdpService {
   RawDatagramSocket? _socket;
   final int robotPort;
-  final Function(String message, String senderIp)? onMessage;
+  Function(String message, String senderIp)? onMessage;
   
   bool get isConnected => _socket != null;
   
