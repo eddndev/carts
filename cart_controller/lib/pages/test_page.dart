@@ -64,8 +64,9 @@ class _TestPageState extends State<TestPage> {
           onPressed: () => Navigator.pop(context),
         ),
       ),
-      body: Column(
-        children: [
+      body: SafeArea(
+        child: Column(
+          children: [
           // Motor Test Grid
           Padding(
             padding: const EdgeInsets.all(16),
@@ -164,27 +165,47 @@ class _TestPageState extends State<TestPage> {
           
           const Divider(color: Colors.white24),
           
-          // Ping & Calibrate
+          // Ping & Calibrate & Explore
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
+            child: Column(
               children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    icon: const Icon(Icons.network_ping),
-                    label: const Text("PING"),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.teal),
-                    onPressed: () => _sendTest("CMD:PING"),
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        icon: const Icon(Icons.rocket_launch),
+                        label: const Text("EXPLORE"),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        onPressed: () => _sendTest("CMD:EXPLORE"),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    icon: const Icon(Icons.settings),
-                    label: const Text("CALIBRATE"),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.deepOrange),
-                    onPressed: () => _sendTest("CMD:CALIBRATE"),
-                  ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        icon: const Icon(Icons.network_ping),
+                        label: const Text("PING"),
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.teal),
+                        onPressed: () => _sendTest("CMD:PING"),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        icon: const Icon(Icons.settings),
+                        label: const Text("CALIBRATE"),
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.deepOrange),
+                        onPressed: () => _sendTest("CMD:CALIBRATE"),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -195,7 +216,7 @@ class _TestPageState extends State<TestPage> {
           // Log Console
           Expanded(
             child: Container(
-              margin: const EdgeInsets.all(16),
+              margin: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.of(context).viewPadding.bottom),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: Colors.black54,
@@ -236,6 +257,7 @@ class _TestPageState extends State<TestPage> {
             ),
           ),
         ],
+        ),
       ),
     );
   }

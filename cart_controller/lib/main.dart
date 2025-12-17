@@ -162,7 +162,7 @@ class _ControllerPageState extends State<ControllerPage> with SingleTickerProvid
         borderRadius: BorderRadius.vertical(top: Radius.circular(20))
       ),
       builder: (ctx) => Padding(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.fromLTRB(24, 24, 24, 24 + MediaQuery.of(ctx).viewPadding.bottom),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -324,7 +324,7 @@ class _ControllerPageState extends State<ControllerPage> with SingleTickerProvid
                   ),
                 ],
               ),
-              const SizedBox(height: 40),
+              const SizedBox(height: 80), // Extra space for system nav bar
             ],
           ),
         ),

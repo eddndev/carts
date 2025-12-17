@@ -28,15 +28,15 @@ const uint8_t SENSOR_COUNT = 6;
   6 // Connect 'LEDON' or 'EMITTER' pin here for ambient light rejection
 
 // --- Motors (L298N) ---
-// Left Motor (Physically connected to M2 pins)
-#define PIN_M1_EN 11
-#define PIN_M1_IN1 13 // Swapped 12/13 to fix "Backward" issue
-#define PIN_M1_IN2 12
+// Left Motor (D2, D3, D4)
+#define PIN_M1_EN 3
+#define PIN_M1_IN1 2
+#define PIN_M1_IN2 4
 
-// Right Motor (Physically connected to M1 pins)
-#define PIN_M2_EN 3
-#define PIN_M2_IN3 2 // Assuming standard (check next test)
-#define PIN_M2_IN4 4
+// Right Motor (D11, D12, D13)
+#define PIN_M2_EN 11
+#define PIN_M2_IN3 12
+#define PIN_M2_IN4 13
 
 // --- PID & Speed Control ---
 #define PID_KP 0.09 // Increased for sharper turns (Mid-point)
@@ -47,9 +47,9 @@ const uint8_t SENSOR_COUNT = 6;
 #define MAX_SPEED 200 // Allow faster corrections
 #define TURN_SPEED 150
 
-// Voltage Safety Limit for 11.2V Battery -> 6V Motors
-// Calculation: (6V / 11.2V) * 255 ~= 136. Safe limit: 140.
-#define MAX_PWM_LIMIT 140
+// Voltage Safety Limit for 11.1V Battery -> 6V Motors
+// Calculation: (6V / 11.1V) * 255 ~= 138. Safe limit: 120 (~5.2V).
+#define MAX_PWM_LIMIT 92
 
 // Deadband Correction (Measured)
 // Lowered slightly to rely on kinetic friction

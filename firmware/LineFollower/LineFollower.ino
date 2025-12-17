@@ -145,6 +145,8 @@ void loop() {
 
   // 6. Debug Output & Visual Feedback
   static unsigned long lastPrint = 0;
+  static NavState lastReportedState = NAV_IDLE;
+
   if (millis() - lastPrint > 200) {
     lastPrint = millis();
     Serial.print("SENSORS: [");
@@ -166,6 +168,28 @@ void loop() {
     case LineSensor::STATE_COMPLEX:
       Serial.println("COMPLEX");
       break;
+    }
+
+    // Broadcast state changes to App Console
+    if (state != lastReportedState) {
+      lastReportedState = state;
+      switch (state) {
+      case NAV_IDLE:
+        network.sendPacket("STATUS:IDLE");
+        break;
+      case NAV_FOLLOWING:
+        network.sendPacket("STATUS:FOLLOWING");
+        break;
+      case NAV_AT_NODE:
+        network.sendPacket("STATUS:AT_NODE");
+        break;
+      case NAV_TURNING:
+        network.sendPacket("STATUS:TURNING");
+        break;
+      case NAV_WAITING_HOST:
+        network.sendPacket("STATUS:WAITING_HOST");
+        break;
+      }
     }
 
     // Update LED Matrix based on high-level state
