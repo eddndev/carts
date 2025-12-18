@@ -7,7 +7,7 @@
 
 // Set to true to make this device the Access Point (Host network)
 // Set to false to connect to an existing network (Client)
-#define IS_ACCESS_POINT false
+#define IS_ACCESS_POINT true
 
 // WiFi Credentials
 // If IS_ACCESS_POINT is true: This device CREATES this network.

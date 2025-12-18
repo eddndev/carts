@@ -19,7 +19,8 @@ void NetworkManager::begin() {
   }
 
 #if IS_ACCESS_POINT
-  Serial.print("Creating Access Point: ");
+  Serial.println("[WiFi] === ACCESS POINT MODE ===");
+  Serial.print("[WiFi] Creating network: ");
   Serial.println(SECRET_SSID);
 
   // Create open network if no password, or secured if password provided
@@ -29,34 +30,91 @@ void NetworkManager::begin() {
 
   WiFi.config(local_ip, gateway, subnet);
 
+  int apStatus;
   if (String(SECRET_PASS).length() == 0) {
-    WiFi.beginAP(SECRET_SSID);
+    apStatus = WiFi.beginAP(SECRET_SSID);
   } else {
-    WiFi.beginAP(SECRET_SSID, SECRET_PASS);
+    apStatus = WiFi.beginAP(SECRET_SSID, SECRET_PASS);
+  }
+  
+  // Wait for AP to be ready
+  delay(1000);
+  
+  if (apStatus == WL_AP_LISTENING) {
+    Serial.println("[WiFi] Access Point ACTIVE!");
+    Serial.print("[WiFi] AP IP: ");
+    Serial.println(WiFi.localIP());
+    Serial.println("[WiFi] Waiting for clients to connect...");
+  } else {
+    Serial.print("[WiFi] AP creation FAILED. Status: ");
+    Serial.println(apStatus);
   }
 #else
-  Serial.print("Connecting to: ");
+  Serial.print("[WiFi] Connecting to SSID: ");
   Serial.println(SECRET_SSID);
 
   // Attempt to connect to WiFi network
-  // Attempt to connect to WiFi network
   int attempts = 0;
-  while (WiFi.status() != WL_CONNECTED) {
-    WiFi.begin(SECRET_SSID, SECRET_PASS);
-    Serial.print(".");
-    // Check for connection every 500ms for 10 seconds, then try again
-    for (int i = 0; i < 20; i++) {
-      if (WiFi.status() == WL_CONNECTED)
-        break;
-      delay(250);
-    }
+  int maxAttempts = 20;
+  
+  while (WiFi.status() != WL_CONNECTED && attempts < maxAttempts) {
     attempts++;
-    if (attempts > 5) {
-      Serial.println("WiFi Retry...");
-      // Maybe show error on LED?
+    Serial.print("[WiFi] Attempt ");
+    Serial.print(attempts);
+    Serial.print("/");
+    Serial.print(maxAttempts);
+    Serial.print(" - ");
+    
+    WiFi.begin(SECRET_SSID, SECRET_PASS);
+    
+    // Wait up to 5 seconds for this attempt
+    for (int i = 0; i < 20; i++) {
+      delay(250);
+      int status = WiFi.status();
+      if (status == WL_CONNECTED) {
+        break;
+      }
+    }
+    
+    // Print detailed status
+    int status = WiFi.status();
+    switch (status) {
+      case WL_CONNECTED:
+        Serial.println("SUCCESS!");
+        break;
+      case WL_NO_SSID_AVAIL:
+        Serial.println("FAILED: Network not found (check SSID)");
+        break;
+      case WL_CONNECT_FAILED:
+        Serial.println("FAILED: Connection rejected (check password)");
+        break;
+      case WL_IDLE_STATUS:
+        Serial.println("IDLE: Still trying...");
+        break;
+      case WL_DISCONNECTED:
+        Serial.println("DISCONNECTED: Retrying...");
+        break;
+      default:
+        Serial.print("UNKNOWN STATUS: ");
+        Serial.println(status);
+        break;
     }
   }
-  Serial.println("\nConnected to WiFi");
+  
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("[WiFi] === CONNECTION SUCCESSFUL ===");
+    Serial.print("[WiFi] Signal strength (RSSI): ");
+    Serial.print(WiFi.RSSI());
+    Serial.println(" dBm");
+  } else {
+    Serial.println("[WiFi] === CONNECTION FAILED ===");
+    Serial.println("[WiFi] Could not connect after maximum attempts.");
+    Serial.println("[WiFi] Possible causes:");
+    Serial.println("[WiFi]   1. SSID incorrect or network out of range");
+    Serial.println("[WiFi]   2. Password incorrect");
+    Serial.println("[WiFi]   3. Router/AP is offline");
+    Serial.println("[WiFi] The cart will continue but network features disabled.");
+  }
 #endif
 
   printWifiStatus();
