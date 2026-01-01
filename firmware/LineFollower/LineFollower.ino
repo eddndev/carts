@@ -75,7 +75,12 @@ void loop() {
   network.update();
   
   // 2. Check Connection State
-  if (!network.isConnected()) {
+  static bool wasConnected = false; 
+  bool isConnected = network.isConnected();
+
+  // 2. Check Connection State
+  if (!isConnected) {
+      wasConnected = false; // Reset if we lose connection
       motors.stop(); // SAFETY STOP
       
       // Visual Feedback based on state
@@ -87,6 +92,13 @@ void loop() {
       
       led.update();
       return; // SKIP the rest of the loop until connected
+  }
+  
+  // Transition Logic: If we just connected, show "Ready"
+  if (!wasConnected && isConnected) {
+      wasConnected = true;
+      led.showStop(); // Clear the "Radar" animation, show Ready
+      Serial.println("Reconnected! LED set to Ready.");
   }
 
   // 3. Update LED animations

@@ -7,11 +7,12 @@
 
 // Set to true to make this device the Access Point (Host network)
 // Set to false to connect to an existing network (Client)
-#define IS_ACCESS_POINT true
+#define IS_ACCESS_POINT false 
 
 // WiFi Credentials
 // If IS_ACCESS_POINT is true: This device CREATES this network.
 // If IS_ACCESS_POINT is false: This device CONNECTS to this network.
+// MODIFY THESE FOR YOUR HOTSPOT:
 #define SECRET_SSID "CartControl"
 #define SECRET_PASS "0102030405"
 
