@@ -8,14 +8,24 @@
 
 class NetworkManager {
 public:
+  enum ConnectionState {
+    DISCONNECTED,
+    CONNECTING,
+    CONNECTED,
+    OFFLINE
+  };
+
   NetworkManager();
-  void begin();
-  void update(); // Call this in loop()
+  void begin(); // Now non-blocking
+  void update(); // Handles state machine
   bool sendPacket(const String &message);
   bool respondToLastSender(const String &message);
   String getLastMessage();
   bool hasNewMessage();
   void sendTelemetry(int nodeId, int sensorState, float distance);
+  
+  bool isConnected();
+  bool isConnecting();
 
 private:
   WiFiUDP Udp;
@@ -23,7 +33,12 @@ private:
   String lastMessage;
   bool newMessageAvailable;
   unsigned long lastPingTime;
+  
+  ConnectionState state;
+  unsigned long lastConnectionAttempt;
+  int connectionAttempts;
 
+  void checkConnection();
   void printWifiStatus();
 };
 

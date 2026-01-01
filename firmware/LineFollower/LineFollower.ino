@@ -56,15 +56,14 @@ void setup() {
   Serial.println("Calibration Complete.");
 
   // Wait 3 seconds before starting motors so user can place robot
-  // Wait 3 seconds before starting motors so user can place robot
   Serial.println("Get Ready! Starting in 3 seconds...");
   led.showReset(); // Show "Filling" animation as readiness
   delay(3000);
 
-  // Network initialization
-  Serial.println("Connecting to WiFi...");
-  led.showExplore(); // Show "Radar" while finding WiFi
-  network.begin();   // BLOCKING until connected
+  // Network initialization (Non-Blocking)
+  Serial.println("Initializing Network Manager...");
+  network.begin(); // Will start connecting in background
+
 
   led.showStop(); // Ready state (Motors 0)
 }
@@ -72,13 +71,28 @@ void setup() {
 void loop() {
   unsigned long currentMillis = millis();
 
-  // 1. Update Network
+  // 1. Update Network (State Machine)
   network.update();
+  
+  // 2. Check Connection State
+  if (!network.isConnected()) {
+      motors.stop(); // SAFETY STOP
+      
+      // Visual Feedback based on state
+      if (network.isConnecting()) {
+          led.showExplore(); // Show "Radar" while searching
+      } else {
+          led.showStop(); // Offline or other error
+      }
+      
+      led.update();
+      return; // SKIP the rest of the loop until connected
+  }
 
-  // 2. Update LED animations
+  // 3. Update LED animations
   led.update();
 
-  // 3. Handle Commands
+  // 4. Handle Commands
   if (network.hasNewMessage()) {
     led.showPacketReceived(); // Visual Flash
     String msg = network.getLastMessage();

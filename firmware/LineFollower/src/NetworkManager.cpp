@@ -3,14 +3,17 @@
 NetworkManager::NetworkManager() {
   newMessageAvailable = false;
   lastPingTime = 0;
+  state = DISCONNECTED;
+  connectionAttempts = 0;
+  lastConnectionAttempt = 0;
 }
 
 void NetworkManager::begin() {
   // Check for WiFi module
   if (WiFi.status() == WL_NO_MODULE) {
     Serial.println("Communication failed: WiFi module not found!");
-    while (true)
-      ; // Stop here
+    state = OFFLINE;
+    return;
   }
 
   String fv = WiFi.firmwareVersion();
@@ -19,135 +22,96 @@ void NetworkManager::begin() {
   }
 
 #if IS_ACCESS_POINT
-  Serial.println("[WiFi] === ACCESS POINT MODE ===");
-  Serial.print("[WiFi] Creating network: ");
-  Serial.println(SECRET_SSID);
-
-  // Create open network if no password, or secured if password provided
-  IPAddress local_ip(192, 168, 4, 1);
-  IPAddress gateway(192, 168, 4, 1);
-  IPAddress subnet(255, 255, 255, 0);
-
-  WiFi.config(local_ip, gateway, subnet);
-
-  int apStatus;
-  if (String(SECRET_PASS).length() == 0) {
-    apStatus = WiFi.beginAP(SECRET_SSID);
-  } else {
-    apStatus = WiFi.beginAP(SECRET_SSID, SECRET_PASS);
-  }
+  // AP Mode (Can be blocking for now, or minimal delay)
+  WiFi.beginAP(SECRET_SSID, SECRET_PASS); 
+  // AP is usually instant on Local modules
+  state = CONNECTED; // Assume success for AP for simplicity in hybrid model
   
-  // Wait for AP to be ready
-  delay(1000);
-  
-  if (apStatus == WL_AP_LISTENING) {
-    Serial.println("[WiFi] Access Point ACTIVE!");
-    Serial.print("[WiFi] AP IP: ");
-    Serial.println(WiFi.localIP());
-    Serial.println("[WiFi] Waiting for clients to connect...");
-  } else {
-    Serial.print("[WiFi] AP creation FAILED. Status: ");
-    Serial.println(apStatus);
-  }
 #else
-  Serial.print("[WiFi] Connecting to SSID: ");
-  Serial.println(SECRET_SSID);
-
-  // Attempt to connect to WiFi network
-  int attempts = 0;
-  int maxAttempts = 20;
-  
-  while (WiFi.status() != WL_CONNECTED && attempts < maxAttempts) {
-    attempts++;
-    Serial.print("[WiFi] Attempt ");
-    Serial.print(attempts);
-    Serial.print("/");
-    Serial.print(maxAttempts);
-    Serial.print(" - ");
-    
-    WiFi.begin(SECRET_SSID, SECRET_PASS);
-    
-    // Wait up to 5 seconds for this attempt
-    for (int i = 0; i < 20; i++) {
-      delay(250);
-      int status = WiFi.status();
-      if (status == WL_CONNECTED) {
-        break;
-      }
-    }
-    
-    // Print detailed status
-    int status = WiFi.status();
-    switch (status) {
-      case WL_CONNECTED:
-        Serial.println("SUCCESS!");
-        break;
-      case WL_NO_SSID_AVAIL:
-        Serial.println("FAILED: Network not found (check SSID)");
-        break;
-      case WL_CONNECT_FAILED:
-        Serial.println("FAILED: Connection rejected (check password)");
-        break;
-      case WL_IDLE_STATUS:
-        Serial.println("IDLE: Still trying...");
-        break;
-      case WL_DISCONNECTED:
-        Serial.println("DISCONNECTED: Retrying...");
-        break;
-      default:
-        Serial.print("UNKNOWN STATUS: ");
-        Serial.println(status);
-        break;
-    }
-  }
-  
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("[WiFi] === CONNECTION SUCCESSFUL ===");
-    Serial.print("[WiFi] Signal strength (RSSI): ");
-    Serial.print(WiFi.RSSI());
-    Serial.println(" dBm");
-  } else {
-    Serial.println("[WiFi] === CONNECTION FAILED ===");
-    Serial.println("[WiFi] Could not connect after maximum attempts.");
-    Serial.println("[WiFi] Possible causes:");
-    Serial.println("[WiFi]   1. SSID incorrect or network out of range");
-    Serial.println("[WiFi]   2. Password incorrect");
-    Serial.println("[WiFi]   3. Router/AP is offline");
-    Serial.println("[WiFi] The cart will continue but network features disabled.");
-  }
+  Serial.println("[WiFi] Starting Connection Process (Non-Blocking)...");
+  state = DISCONNECTED; // Will trigger connect in first update
 #endif
 
-  printWifiStatus();
-
-  // Start UDP
+  // UDP Begin immediately to be ready
   Udp.begin(UDP_PORT);
-  Serial.print("Listening on UDP port: ");
-  Serial.println(UDP_PORT);
 }
 
 void NetworkManager::update() {
-  // Check for packets
-  int packetSize = Udp.parsePacket();
-  if (packetSize) {
-    Serial.print("Received packet of size ");
-    Serial.println(packetSize);
-    Serial.print("From ");
-    IPAddress remoteIp = Udp.remoteIP();
-    Serial.print(remoteIp);
-    Serial.print(", port ");
-    Serial.println(Udp.remotePort());
+  unsigned long currentMillis = millis();
 
-    // Read the packet into packetBufffer
-    int len = Udp.read(packetBuffer, 255);
-    if (len > 0) {
-      packetBuffer[len] = 0;
-    }
+#if !IS_ACCESS_POINT
+  // State Machine for Connection
+  switch (state) {
+    case DISCONNECTED:
+      if (currentMillis - lastConnectionAttempt > 1000) { // Wait 1s before retry
+         Serial.print("[WiFi] Attempting connection to: ");
+         Serial.println(SECRET_SSID);
+         WiFi.begin(SECRET_SSID, SECRET_PASS);
+         state = CONNECTING;
+         lastConnectionAttempt = currentMillis;
+         connectionAttempts++;
+      }
+      break;
+      
+    case CONNECTING:
+      if (WiFi.status() == WL_CONNECTED) {
+          state = CONNECTED;
+          Serial.println("[WiFi] CONNECTED!");
+          printWifiStatus();
+          connectionAttempts = 0;
+      } else if (currentMillis - lastConnectionAttempt > 10000) {
+          // Timeout after 10s
+          Serial.println("[WiFi] Connection Timeout.");
+          state = DISCONNECTED; // Go back to retry
+          WiFi.disconnect(); // Clear state
+          
+          if (connectionAttempts > 5) {
+              Serial.println("[WiFi] Too many failed attempts. Entering Offline Mode temporarily.");
+              state = OFFLINE;
+              lastConnectionAttempt = currentMillis; // Use this as timer for offline duration
+          }
+      }
+      break;
 
-    lastMessage = String(packetBuffer);
-    newMessageAvailable = true;
-    Serial.println("Contents: " + lastMessage);
+    case OFFLINE:
+       // Stay offline for 30 seconds then retry
+       if (currentMillis - lastConnectionAttempt > 30000) {
+           Serial.println("[WiFi] Retrying connection after offline wait...");
+           state = DISCONNECTED;
+           connectionAttempts = 0;
+       }
+       break;
+
+    case CONNECTED:
+       // Periodically check if we lost connection (every 5s)
+       if (currentMillis - lastConnectionAttempt > 5000) {
+           lastConnectionAttempt = currentMillis;
+           if (WiFi.status() != WL_CONNECTED) {
+               Serial.println("[WiFi] Lost connection!");
+               state = DISCONNECTED;
+               WiFi.disconnect();
+           }
+       }
+       break;
   }
-}
+#endif
+
+  // Only process UDP if Connected
+  if (state == CONNECTED || state == OFFLINE) { // Allow AP/Offline logic
+      // In OFFLINE we might want to skip UDP, but keeping it safe.
+      if (state == CONNECTED) {
+        int packetSize = Udp.parsePacket();
+        if (packetSize) {
+            int len = Udp.read(packetBuffer, 255);
+            if (len > 0) packetBuffer[len] = 0;
+            lastMessage = String(packetBuffer);
+            newMessageAvailable = true;
+            // Serial.println("Msg: " + lastMessage);
+        }
+      }
+  }
+}    
+
 
 bool NetworkManager::sendPacket(const String &message) {
   // For carts, we typically broadcast if we don't know the other IP,
@@ -189,6 +153,15 @@ bool NetworkManager::hasNewMessage() {
 }
 
 String NetworkManager::getLastMessage() { return lastMessage; }
+
+
+bool NetworkManager::isConnected() {
+    return state == CONNECTED;
+}
+
+bool NetworkManager::isConnecting() {
+    return state == CONNECTING;
+}
 
 void NetworkManager::printWifiStatus() {
   Serial.print("SSID: ");
