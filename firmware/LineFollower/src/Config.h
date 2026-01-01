@@ -40,22 +40,25 @@ const uint8_t SENSOR_COUNT = 6;
 #define PIN_M2_IN4 13
 
 // --- PID & Speed Control ---
+// --- PID & Speed Control ---
 #define PID_KP 0.09 // Increased for sharper turns (Mid-point)
 #define PID_KI 0.0
 #define PID_KD 1.0 // High Damping maintained
 
-#define BASE_SPEED 90 // Compromise speed for control + torque
-#define MAX_SPEED 200 // Allow faster corrections
-#define TURN_SPEED 150
+#define BASE_SPEED 60 // Lower control point for precision
+#define MAX_SPEED 200 // PID headroom
+#define TURN_SPEED 120
 
 // Voltage Safety Limit for 11.1V Battery -> 6V Motors
-// Calculation: (6V / 11.1V) * 255 ~= 138. Safe limit: 120 (~5.2V).
-#define MAX_PWM_LIMIT 92
+// Calculation: (6V / 11.1V) * 255 ~= 138.
+// User Request: Lowering even more to prevent derailment.
+// 92 -> 75 (~4V-5V effective, safe and slower)
+#define MAX_PWM_LIMIT 75
 
 // Deadband Correction (Measured)
 // Lowered slightly to rely on kinetic friction
-#define MIN_PWM_L 90
-#define MIN_PWM_R 85
+#define MIN_PWM_L 70 // Tune these if it doesn't move
+#define MIN_PWM_R 65
 
 // Speed Matching Factors (0.0 to 1.0)
 #define SPEED_FACTOR_L 1.0
