@@ -61,16 +61,23 @@ void setup() {
   delay(3000);
 
   // Network initialization (Non-Blocking)
+#if ENABLE_WIFI
   Serial.println("Initializing Network Manager...");
   network.begin(); // Will start connecting in background
-
-
-  led.showStop(); // Ready state (Motors 0)
+#else
+  Serial.println("OFFLINE MODE: Skipping Network.");
+  Serial.println("Auto-starting Autonomous Exploration...");
+  navigator.startExploration(); // Start DFS immediately
+  led.showExplore(); // Show "Searching"/Moving animation
+#endif
+ 
+  // led.showStop(); // Removed in offline mode so we see the Explore animation
 }
 
 void loop() {
   unsigned long currentMillis = millis();
 
+#if ENABLE_WIFI
   // 1. Update Network (State Machine)
   network.update();
   
@@ -78,32 +85,51 @@ void loop() {
   static bool wasConnected = false; 
   bool isConnected = network.isConnected();
 
-  // 2. Check Connection State
   if (!isConnected) {
-      wasConnected = false; // Reset if we lose connection
+      wasConnected = false; 
       motors.stop(); // SAFETY STOP
       
-      // Visual Feedback based on state
       if (network.isConnecting()) {
-          led.showExplore(); // Show "Radar" while searching
+          led.showExplore(); 
       } else {
-          led.showStop(); // Offline or other error
+          led.showStop(); 
       }
       
       led.update();
       return; // SKIP the rest of the loop until connected
   }
   
-  // Transition Logic: If we just connected, show "Ready"
   if (!wasConnected && isConnected) {
       wasConnected = true;
-      led.showStop(); // Clear the "Radar" animation, show Ready
+      led.showStop(); 
       Serial.println("Reconnected! LED set to Ready.");
   }
+#endif
 
   // 3. Update LED animations
   led.update();
 
+#if ENABLE_WIFI
+  // 4. Handle Commands
+  if (network.hasNewMessage()) {
+     // ... (Existing command logic safely inside ifdef)
+     // To avoid massive diff, we might just wrap the whole block
+     // But strictly, we should just let it compile out. 
+     // For this edit, I will assume the user understands I am replacing the TOP part of the loop
+     // AND I need to wrap the rest of the command block or network calls.
+  }
+#endif
+  
+  // Actually, to avoid breaking the file structure with replace_file_content on a huge block,
+  // I will only replace the setup and top of loop here, and then use a second call to wrap the command section if needed.
+  // Wait, the previous tool call was limited range. 
+  // Let's replace the SETUP part first.
+
+
+  // 3. Update LED animations
+  led.update();
+
+#if ENABLE_WIFI
   // 4. Handle Commands
   if (network.hasNewMessage()) {
     led.showPacketReceived(); // Visual Flash
@@ -158,6 +184,7 @@ void loop() {
       network.respondToLastSender("OK:RIGHT");
     }
   }
+#endif
 
   // 4. Sensor Reading
   uint16_t position = sensors.readLine();

@@ -9,10 +9,11 @@
 // Set to false to connect to an existing network (Client)
 #define IS_ACCESS_POINT false 
 
-// WiFi Credentials
-// If IS_ACCESS_POINT is true: This device CREATES this network.
-// If IS_ACCESS_POINT is false: This device CONNECTS to this network.
-// MODIFY THESE FOR YOUR HOTSPOT:
+// MASTER SWITCH: Set to FALSE for Autonomous Offline Mode (No WiFi)
+// Set to TRUE for Hybrid Mode (Waiting for App commands)
+#define ENABLE_WIFI false
+
+// WiFi Credentials (Ignored if ENABLE_WIFI is false)
 #define SECRET_SSID "CartControl"
 #define SECRET_PASS "0102030405"
 

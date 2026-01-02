@@ -23,9 +23,15 @@ void Navigator::update(bool nodeDetected, bool lineDetected,
     // Only trigger node if we are FOLLOWING (not already turning or stuck)
     if (currentState == NAV_FOLLOWING) {
       lastNodeTime = currentMillis;
+      
+#if ENABLE_WIFI
       // Hybrid Architecture Mod: Stop and wait for Host (App) instruction
       currentState = NAV_WAITING_HOST;
       Serial.println("NAV: Node Reached. Waiting for Host...");
+#else
+      // Offline Mode: Self-manage handling (Autonomous)
+      handleNodeArrival();
+#endif
     }
   }
 
