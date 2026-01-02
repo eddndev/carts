@@ -22,3 +22,6 @@ Thumbs.db
 
 # Private credentials
 arduino_secrets.h
+
+# Libraries
+libraries/
