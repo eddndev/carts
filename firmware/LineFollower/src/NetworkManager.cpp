@@ -43,10 +43,13 @@ void NetworkManager::update() {
   // State Machine for Connection
   switch (state) {
     case DISCONNECTED:
-      if (currentMillis - lastConnectionAttempt > 1000) { // Wait 1s before retry
+      // blocking nature of WiFi.begin() on R4 causes "freezing".
+      // We increase the delay significantly so the user sees animation 
+      // for at least a few seconds between frozen attempts.
+      if (currentMillis - lastConnectionAttempt > 5000) { // Wait 5s before retry
          Serial.print("[WiFi] Attempting connection to: ");
          Serial.println(SECRET_SSID);
-         WiFi.begin(SECRET_SSID, SECRET_PASS);
+         WiFi.begin(SECRET_SSID, SECRET_PASS); // This is blocking for several seconds on fail
          state = CONNECTING;
          lastConnectionAttempt = currentMillis;
          connectionAttempts++;
