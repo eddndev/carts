@@ -16,7 +16,7 @@ class UdpService {
   /// Initialize UDP socket
   Future<bool> connect() async {
     try {
-      _socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
+      _socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, robotPort);
       _socket!.broadcastEnabled = true;
       
       _socket!.listen((RawSocketEvent e) {

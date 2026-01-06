@@ -58,10 +58,18 @@ void NetworkManager::update() {
       
     case CONNECTING:
       if (WiFi.status() == WL_CONNECTED) {
-          state = CONNECTED;
-          Serial.println("[WiFi] CONNECTED!");
-          printWifiStatus();
-          connectionAttempts = 0;
+          IPAddress ip = WiFi.localIP();
+          // Wait for valid IP (DHCP can take a moment after WL_CONNECTED)
+          if (ip[0] != 0) { 
+              state = CONNECTED;
+              Serial.println("[WiFi] CONNECTED! (IP Assigned)");
+              printWifiStatus();
+              connectionAttempts = 0;
+          } else {
+              // Still waiting for IP, stay in CONNECTING
+              // Occasionally print status if needed, or just wait.
+              if ((currentMillis % 500) == 0) Serial.print("."); 
+          }
       } else if (currentMillis - lastConnectionAttempt > 10000) {
           // Timeout after 10s
           Serial.println("[WiFi] Connection Timeout.");

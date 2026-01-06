@@ -110,6 +110,17 @@ void loop() {
   led.update();
 
 #if ENABLE_WIFI
+  // Periodic Heartbeat
+  if (currentMillis - lastPingTime > interval) {
+      lastPingTime = currentMillis;
+      if (network.isConnected()) {
+          // Send identity so App detects us even if PING fails
+          network.sendPacket("ACK:CartFollower");
+      }
+  }
+#endif
+
+#if ENABLE_WIFI
   // 4. Handle Commands
   if (network.hasNewMessage()) {
      // ... (Existing command logic safely inside ifdef)

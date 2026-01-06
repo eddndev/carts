@@ -11,11 +11,11 @@
 
 // MASTER SWITCH: Set to FALSE for Autonomous Offline Mode (No WiFi)
 // Set to TRUE for Hybrid Mode (Waiting for App commands)
-#define ENABLE_WIFI false
+#define ENABLE_WIFI true
 
 // WiFi Credentials (Ignored if ENABLE_WIFI is false)
-#define SECRET_SSID "CartControl"
-#define SECRET_PASS "0102030405"
+#define SECRET_SSID "carts"
+#define SECRET_PASS "10carts01"
 
 // Communication
 #define UDP_PORT 4210

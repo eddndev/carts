@@ -1,25 +1,24 @@
 import socket
 import time
 
-IP = "192.168.4.1"
 PORT = 4210
-MESSAGE = "CMD:PING"
-
-print(f"Sending '{MESSAGE}' to {IP}:{PORT}...")
+# Listen on all interfaces
+IP = "0.0.0.0" 
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-sock.settimeout(2)
-
 try:
-    sock.sendto(MESSAGE.encode(), (IP, PORT))
-    print("message sent.")
+    sock.bind((IP, PORT))
+    print(f"Listening for UDP packets on port {PORT}...")
+    print("Press Ctrl+C to stop.")
     
-    # Listen for reply
-    print("Waiting for reply...")
-    data, addr = sock.recvfrom(1024)
-    print(f"Received reply from {addr}: {data.decode()}")
+    while True:
+        data, addr = sock.recvfrom(1024)
+        print(f"[{time.strftime('%H:%M:%S')}] Received from {addr}: {data.decode()}")
 
-except socket.timeout:
-    print("No reply received (Timeout).")
+except OSError as e:
+    print(f"Error binding to port: {e}")
+    print("Is another instance running? Or Firewall blocking?")
+except KeyboardInterrupt:
+    print("\nStopped.")
 except Exception as e:
     print(f"Error: {e}")
