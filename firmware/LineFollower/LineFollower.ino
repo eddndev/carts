@@ -115,21 +115,12 @@ void loop() {
       lastPingTime = currentMillis;
       if (network.isConnected()) {
           // Send identity so App detects us even if PING fails
-          network.sendPacket("ACK:CartFollower");
+          network.sendPacket("PONG:CartFollower");
       }
   }
 #endif
 
-#if ENABLE_WIFI
-  // 4. Handle Commands
-  if (network.hasNewMessage()) {
-     // ... (Existing command logic safely inside ifdef)
-     // To avoid massive diff, we might just wrap the whole block
-     // But strictly, we should just let it compile out. 
-     // For this edit, I will assume the user understands I am replacing the TOP part of the loop
-     // AND I need to wrap the rest of the command block or network calls.
-  }
-#endif
+
   
   // Actually, to avoid breaking the file structure with replace_file_content on a huge block,
   // I will only replace the setup and top of loop here, and then use a second call to wrap the command section if needed.
@@ -171,8 +162,8 @@ void loop() {
       delay(1000);
       led.showStop();
     } else if (msg.startsWith("CMD:PING")) {
-      // Reply with identity (PONG for Presence)
-      network.respondToLastSender("PONG:CartFollower");
+      // Reply with ACK to differentiate from auto-heartbeat
+      network.respondToLastSender("ACK:PING");
       led.showPacketReceived();
     } else if (msg.startsWith("CMD:CALIBRATE")) {
       led.showCalibration();

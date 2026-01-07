@@ -28,7 +28,10 @@ class _TestPageState extends State<TestPage> {
     // Listen for Arduino responses
     widget.udpService.onMessage = (msg, senderIp) {
       if (senderIp == widget.targetIp) {
-        _addLog("📥 $msg");
+        // Filter out heartbeat noise so we can see real command ACKs
+        if (!msg.contains("CartFollower")) {
+          _addLog("📥 $msg");
+        }
       }
     };
   }
