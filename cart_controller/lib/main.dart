@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 
 // Services
 import 'services/udp_service.dart';
@@ -51,6 +52,8 @@ class _ControllerPageState extends State<ControllerPage> with SingleTickerProvid
   late UdpService _udpService;
   final DfsExplorer _dfsExplorer = DfsExplorer();
   
+  Timer? _heartbeatTimer;
+
   // UI State
   final TextEditingController _ipController = TextEditingController();
   String _status = "Disconnected";
@@ -65,9 +68,9 @@ class _ControllerPageState extends State<ControllerPage> with SingleTickerProvid
     super.initState();
     
     _pulseController = AnimationController(
-      vsync: this, 
-      duration: const Duration(seconds: 2)
-    )..repeat(reverse: true);
+        vsync: this, 
+        duration: const Duration(seconds: 2)
+      )..repeat(reverse: true);
     
     _pulseAnimation = Tween<double>(begin: 1.0, end: 1.2).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut)
@@ -79,10 +82,25 @@ class _ControllerPageState extends State<ControllerPage> with SingleTickerProvid
     );
     
     _connect();
+
+    // Heartbeat Timer: Send PING every 2 seconds
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
+      // Only ping if not actively scanning (which floods anyway)
+      if (!_isScanning) {
+        // If we have a target, ping it directly (more reliable)
+        if (_ipController.text.isNotEmpty) {
+           _udpService.sendCommand("CMD:PING", _ipController.text);
+        } else {
+           // Otherwise broadcast to find devices
+           _udpService.broadcast("CMD:PING");
+        }
+      }
+    });
   }
 
   @override
   void dispose() {
+    _heartbeatTimer?.cancel();
     _udpService.disconnect();
     _pulseController.dispose();
     _ipController.dispose();
@@ -92,13 +110,13 @@ class _ControllerPageState extends State<ControllerPage> with SingleTickerProvid
   Future<void> _connect() async {
     bool success = await _udpService.connect();
     setState(() {
-      _status = success ? "Ready. Scan or Enter IP." : "Connection failed";
+      _status = success ? "Ready. Waiting for Heartbeat..." : "Connection failed";
     });
   }
   
   void _handleMessage(String msg, String senderIp) {
-    // ACK for discovery
-    if (msg.startsWith("ACK:")) {
+    // ACK (or PONG) for discovery
+    if (msg.startsWith("ACK:") || msg.startsWith("PONG:")) {
       if (!_foundDevices.contains(senderIp)) {
         setState(() => _foundDevices.add(senderIp));
       }

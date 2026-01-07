@@ -13,7 +13,14 @@ Este documento detalla las conexiones físicas entre el **Arduino Uno R4 WiFi**,
     *   `GND` → Batería Negativo (-).
     *   `5V` Output → No conectado (El Arduino tiene su propio regulador, o puede usarse para alimentar sensores si necesario).
 
-> **⚠️ IMPORTANTE**: Con 11.1V, los motores de 6V se quemarían si se usan al 100%. El firmware limita la potencia automáticamente (`MAX_PWM_LIMIT`) para simular 6V. **No borres esa limitación en el código.**
+
+> **⚠️ IMPORTANTE - Jumper de 5V**:
+> *   **Jumper Puesto (ON)**: El módulo usa la batería (12V) para generar sus propios 5V. La bornera de 5V es una **SALIDA**.
+>     *   *Configuración recomendada para tu batería de 11.1V.*
+> *   **Jumper Quitado (OFF)**: El regulador se apaga. Debes meter 5V externos por la bornera de 5V. La bornera de 5V es una **ENTRADA**.
+>     *   *Solo haz esto si tu batería fuera mayor a 12V (para no quemar el regulador).*
+
+> **⚠️ Precaución de Voltaje**: Con 11.1V, los motores de 6V se quemarían si se usan al 100%. El firmware limita la potencia automáticamente (`MAX_PWM_LIMIT`) para simular 6V. **No borres esa limitación en el código.**
 
 ## 2. Motores (Driver L298N)
 | Motor | Driver Pin | Arduino Pin | Función |
