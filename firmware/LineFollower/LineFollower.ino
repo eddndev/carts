@@ -140,7 +140,7 @@ void loop() {
     if (msg.startsWith("NAV:")) {
       String navCmd = msg.substring(4);
       navigator.processExternalCommand(navCmd);
-      network.respondToLastSender("OK:" + navCmd);
+      network.respondToLastSender("ACK:" + navCmd);
     }
     // Comandos de sistema
     else if (msg.startsWith("CMD:EXPLORE")) {
@@ -150,7 +150,7 @@ void loop() {
       navigator.stop();
       motors.setSpeeds(0, 0);
       led.showStop();
-      network.respondToLastSender("OK:STOP");
+      network.respondToLastSender("ACK:STOP");
     } else if (msg.startsWith("CMD:RESET")) {
       navigator.stop();
       motors.setSpeeds(0, 0);
@@ -160,28 +160,28 @@ void loop() {
       delay(1000);
       led.showStop();
     } else if (msg.startsWith("CMD:PING")) {
-      // Reply with identity
-      network.respondToLastSender("ACK:CartFollower");
+      // Reply with identity (PONG for Presence)
+      network.respondToLastSender("PONG:CartFollower");
       led.showPacketReceived();
     } else if (msg.startsWith("CMD:CALIBRATE")) {
       led.showCalibration();
       sensors.calibrate();
-      network.respondToLastSender("OK:CALIBRATE");
+      network.respondToLastSender("ACK:CALIBRATE");
       led.showStop();
     }
     // TEST Commands (from Test Page)
     else if (msg.startsWith("TEST:FWD")) {
       motors.setSpeeds(BASE_SPEED, BASE_SPEED);
-      network.respondToLastSender("OK:FWD");
+      network.respondToLastSender("ACK:FWD");
     } else if (msg.startsWith("TEST:BWD")) {
       motors.setSpeeds(-BASE_SPEED, -BASE_SPEED);
-      network.respondToLastSender("OK:BWD");
+      network.respondToLastSender("ACK:BWD");
     } else if (msg.startsWith("TEST:LEFT")) {
       motors.setSpeeds(-TURN_SPEED, TURN_SPEED);
-      network.respondToLastSender("OK:LEFT");
+      network.respondToLastSender("ACK:LEFT");
     } else if (msg.startsWith("TEST:RIGHT")) {
       motors.setSpeeds(TURN_SPEED, -TURN_SPEED);
-      network.respondToLastSender("OK:RIGHT");
+      network.respondToLastSender("ACK:RIGHT");
     }
   }
 #endif
