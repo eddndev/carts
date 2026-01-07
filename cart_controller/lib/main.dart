@@ -1,17 +1,13 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'dart:convert'; // For JSON
 
 // Services
 import 'services/udp_service.dart';
-import 'services/dfs_explorer.dart';
 
 // Widgets
-import 'widgets/control_button.dart';
-import 'widgets/explore_button.dart';
-import 'widgets/connection_card.dart';
-
-// Pages
-import 'pages/test_page.dart';
+import 'widgets/control_pad.dart';
+import 'widgets/sensor_bar.dart';
 
 void main() {
   runApp(const RobotControllerApp());
@@ -23,7 +19,7 @@ class RobotControllerApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Robot Controller',
+      title: 'Antigravity Fleet',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
@@ -35,65 +31,47 @@ class RobotControllerApp extends StatelessWidget {
         ),
         scaffoldBackgroundColor: const Color(0xFF0F172A),
       ),
-      home: const ControllerPage(),
+      home: const FleetDashboard(),
     );
   }
 }
 
-class ControllerPage extends StatefulWidget {
-  const ControllerPage({super.key});
+class FleetDashboard extends StatefulWidget {
+  const FleetDashboard({super.key});
 
   @override
-  State<ControllerPage> createState() => _ControllerPageState();
+  State<FleetDashboard> createState() => _FleetDashboardState();
 }
 
-class _ControllerPageState extends State<ControllerPage> with SingleTickerProviderStateMixin {
+class _FleetDashboardState extends State<FleetDashboard> with SingleTickerProviderStateMixin {
   // Services
   late UdpService _udpService;
-  final DfsExplorer _dfsExplorer = DfsExplorer();
   
-  Timer? _heartbeatTimer;
-
-  // UI State
-  final TextEditingController _ipController = TextEditingController();
-  String _status = "Disconnected";
+  // State
   List<String> _foundDevices = [];
+  String _selectedIp = "ALL"; // Default to Broadcast
   bool _isScanning = false;
-
-  late AnimationController _pulseController;
-  late Animation<double> _pulseAnimation;
+  String _lastLog = "Waiting for data...";
+  List<int> _sensorData = [0,0,0,0,0,0];
+  
+  // Heartbeat
+  Timer? _heartbeatTimer;
 
   @override
   void initState() {
     super.initState();
     
-    _pulseController = AnimationController(
-        vsync: this, 
-        duration: const Duration(seconds: 2)
-      )..repeat(reverse: true);
-    
-    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.2).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut)
-    );
-    
-    // Initialize UDP Service with message handler
+    // Initialize UDP
     _udpService = UdpService(
       onMessage: _handleMessage,
     );
-    
     _connect();
-
-    // Heartbeat Timer: Send PING every 2 seconds
+    
+    // Heartbeat every 2s
     _heartbeatTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
-      // Only ping if not actively scanning (which floods anyway)
       if (!_isScanning) {
-        // If we have a target, ping it directly (more reliable)
-        if (_ipController.text.isNotEmpty) {
-           _udpService.sendCommand("CMD:PING", _ipController.text);
-        } else {
-           // Otherwise broadcast to find devices
-           _udpService.broadcast("CMD:PING");
-        }
+        // Broadcast PING to keep finding devices and keep them alive
+        _udpService.broadcast("CMD:PING");
       }
     });
   }
@@ -102,251 +80,277 @@ class _ControllerPageState extends State<ControllerPage> with SingleTickerProvid
   void dispose() {
     _heartbeatTimer?.cancel();
     _udpService.disconnect();
-    _pulseController.dispose();
-    _ipController.dispose();
     super.dispose();
   }
 
   Future<void> _connect() async {
-    bool success = await _udpService.connect();
-    setState(() {
-      _status = success ? "Ready. Waiting for Heartbeat..." : "Connection failed";
-    });
+    await _udpService.connect();
+    _startScan();
   }
   
   void _handleMessage(String msg, String senderIp) {
-    // ACK (or PONG) for discovery
-    if (msg.startsWith("ACK:") || msg.startsWith("PONG:")) {
+    // 1. Discovery (Heartbeat or Manual Ping)
+    if (msg.contains("PONG") || msg.contains("ACK")) {
       if (!_foundDevices.contains(senderIp)) {
-        setState(() => _foundDevices.add(senderIp));
+        setState(() {
+          _foundDevices.add(senderIp);
+        });
       }
     }
     
-    // Telemetry JSON from robot (Hybrid Arch)
+    // 2. Telemetry / Auto Logic
     if (msg.startsWith("{")) {
-      _handleTelemetry(msg, senderIp);
-    }
-  }
-  
-  void _handleTelemetry(String json, String senderIp) {
-    try {
-      RegExp stateRegex = RegExp(r'"s":(\d+)');
-      var match = stateRegex.firstMatch(json);
-      if (match != null) {
-        int robotState = int.parse(match.group(1)!);
+       try {
+        // Parse JSON
+        Map<String, dynamic> data = jsonDecode(msg);
         
-        // NAV_WAITING_HOST = 4
-        if (robotState == 4 && _dfsExplorer.isExploring) {
-          String decision = _dfsExplorer.decide();
-          _udpService.sendCommand("NAV:$decision", senderIp);
-          
-          setState(() {
-            _status = "Node ${_dfsExplorer.nodeCount}: $decision";
-          });
+        // Auto Logic: State 4 = WAITING_HOST
+        if (data.containsKey('s') && data['s'] == 4) {
+           _udpService.sendCommand("NAV:GO_STRAIGHT", senderIp);
+           setState(() => _lastLog = "Auto: STRAIGHT -> $senderIp");
         }
-      }
-    } catch (e) {
-      print("Telemetry parse error: $e");
+        
+        // Sensor Data
+        if (data.containsKey('v')) {
+           List<dynamic> rawList = data['v'];
+           setState(() {
+              _sensorData = rawList.map((e) => (e as num).toInt()).toList();
+           });
+        }
+        
+       } catch (e) {
+         // Ignore parse errors
+       }
+    }
+    
+    // 3. Mini-Console Logging
+    if (!msg.contains("CartFollower") && !msg.startsWith("{")) {
+      setState(() => _lastLog = "[$senderIp] $msg");
     }
   }
 
   void _startScan() async {
-    setState(() {
-      _foundDevices.clear();
-      _isScanning = true;
-      _status = "Scanning...";
-    });
-    
+    setState(() => _isScanning = true);
     await _udpService.scanSubnets();
-    
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) {
-        setState(() {
-          _isScanning = false;
-          _status = _foundDevices.isEmpty 
-            ? "No robots found." 
-            : "Found ${_foundDevices.length} robots.";
-        });
-        _showDeviceList();
-      }
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _isScanning = false);
     });
-  }
-  
-  void _showDeviceList() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1E293B),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20))
-      ),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.fromLTRB(24, 24, 24, 24 + MediaQuery.of(ctx).viewPadding.bottom),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text("Available Robots", 
-                  style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)
-                ),
-                if (_isScanning) 
-                  const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                else 
-                  IconButton(
-                    icon: const Icon(Icons.refresh, color: Colors.cyanAccent),
-                    onPressed: () {
-                      Navigator.pop(ctx);
-                      _startScan();
-                    }
-                  )
-              ],
-            ),
-            const SizedBox(height: 16),
-            if (_foundDevices.isEmpty && _ipController.text.isEmpty) 
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 20),
-                child: Text("No devices found.", style: TextStyle(color: Colors.white54)),
-              ),
-            // Show currently connected device if any
-            if (_ipController.text.isNotEmpty)
-              ListTile(
-                leading: const Icon(Icons.check_circle, color: Colors.greenAccent),
-                title: Text("Connected (${_ipController.text})", style: const TextStyle(color: Colors.greenAccent)),
-                subtitle: const Text("Current target", style: TextStyle(color: Colors.white38)),
-              ),
-            ..._foundDevices.where((ip) => ip != _ipController.text).map((ip) => ListTile(
-              leading: const Icon(Icons.smart_toy, color: Colors.cyanAccent),
-              title: Text("Robot ($ip)", style: const TextStyle(color: Colors.white)),
-              subtitle: const Text("Tap to Connect", style: TextStyle(color: Colors.white38)),
-              trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white24, size: 16),
-              onTap: () {
-                setState(() {
-                  _ipController.text = ip;
-                  _status = "Connected to $ip";
-                });
-                Navigator.pop(ctx);
-              },
-            )),
-          ],
-        ),
-      ),
-    );
   }
 
   void _sendCommand(String cmd) {
-    if (_ipController.text.isEmpty) {
-      _startScan();
-      return;
+    if (_selectedIp == "ALL") {
+      _udpService.broadcast(cmd);
+      setState(() => _lastLog = "Broadcast: $cmd");
+    } else {
+      _udpService.sendCommand(cmd, _selectedIp);
+      setState(() => _lastLog = "Sent: $cmd -> $_selectedIp");
     }
-    
-    bool success = _udpService.sendCommand(cmd, _ipController.text);
-    setState(() {
-      _status = success ? "Sent: $cmd" : "Send failed";
-    });
-  }
-  
-  void _startExploration() {
-    _dfsExplorer.start();
-    _sendCommand("CMD:EXPLORE");
-    setState(() {});
-  }
-  
-  void _stopExploration() {
-    _dfsExplorer.stop();
-    _sendCommand("CMD:STOP");
-    setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("ANTIGRAVITY CONTROL", 
-          style: TextStyle(letterSpacing: 2, fontWeight: FontWeight.bold)
-        ),
+        title: const Text("CARTS CONTROL CENTER", style: TextStyle(letterSpacing: 2, fontWeight: FontWeight.bold)),
         centerTitle: true,
         backgroundColor: Colors.transparent,
         elevation: 0,
+        actions: [
+          IconButton(
+            icon: Icon(_isScanning ? Icons.wifi_find : Icons.refresh),
+            onPressed: _startScan,
+            tooltip: "Rescan Network",
+          )
+        ],
       ),
       body: SafeArea(
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(24, 24, 24, 24 + MediaQuery.of(context).padding.bottom),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Connection Card
-              ConnectionCard(
-                ipController: _ipController,
-                status: _status,
-                onScan: _startScan,
+        child: Column(
+          children: [
+            // 1. FLEET SELECTOR (Carousel)
+            Container(
+              height: 100,
+              margin: const EdgeInsets.symmetric(vertical: 16),
+              child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: _foundDevices.length + 1,
+                  itemBuilder: (context, index) {
+                    if (index == 0) {
+                      final isSelected = _selectedIp == "ALL";
+                      return _DeviceCard(
+                        label: "ALL",
+                        icon: Icons.groups, 
+                        color: Colors.purpleAccent,
+                        isSelected: isSelected,
+                        onTap: () => setState(() => _selectedIp = "ALL"),
+                      );
+                    } else {
+                      final ip = _foundDevices[index - 1]; 
+                      final isSelected = ip == _selectedIp;
+                      return _DeviceCard(
+                        label: ip.split('.').last,
+                        icon: Icons.smart_toy,
+                        color: Colors.cyanAccent,
+                        isSelected: isSelected,
+                        onTap: () => setState(() => _selectedIp = ip),
+                      );
+                    }
+                  },
               ),
-              
-              const Spacer(),
-              
-              // Explore Button
-              Center(
-                child: ExploreButton(
-                  isExploring: _dfsExplorer.isExploring,
-                  nodeCount: _dfsExplorer.nodeCount,
-                  pulseAnimation: _pulseAnimation,
-                  onTap: _startExploration,
-                ),
+            ),
+            
+            // 1.5 SENSOR BAR (Visualizer) - Only if specific robot selected
+            if (_selectedIp != "ALL") ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
+                child: SensorBar(sensorValues: _sensorData),
               ),
-              
-              const Spacer(),
-              
-              // Control Buttons Row
-              Row(
+            ],
+            
+            // 2. MINI CONSOLE
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 24),
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+              decoration: BoxDecoration(
+                color: Colors.black45,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.white10)
+              ),
+              child: Row(
                 children: [
-                  Expanded(
-                    child: ControlButton(
-                      label: "STOP",
-                      icon: Icons.stop_circle_outlined,
-                      color: Colors.redAccent,
-                      onTap: _stopExploration,
-                    ),
-                  ),
+                  const Icon(Icons.terminal, size: 16, color: Colors.greenAccent),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: ControlButton(
-                      label: "TEST",
-                      icon: Icons.build_outlined,
-                      color: Colors.orange,
-                      onTap: () {
-                        if (_ipController.text.isEmpty) {
-                          _startScan();
-                          return;
-                        }
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => TestPage(
-                              udpService: _udpService,
-                              targetIp: _ipController.text,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ControlButton(
-                      label: "RESET",
-                      icon: Icons.refresh,
-                      color: Colors.amber,
-                      onTap: () => _sendCommand("CMD:RESET"),
+                    child: Text(_lastLog, 
+                      style: const TextStyle(fontFamily: 'monospace', color: Colors.greenAccent, fontSize: 12),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 80), // Extra space for system nav bar
-            ],
-          ),
+            ),
+
+            const Spacer(),
+
+            // 3. CONTROL PAD
+            ControlPad(
+              onCommand: _sendCommand,
+              enabled: true, 
+            ),
+            
+            const Spacer(),
+            
+            // 4. ACTION BAR (Ping, Calib, Auto)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _ActionButton(
+                    icon: Icons.network_ping, 
+                    label: "PING", 
+                    color: Colors.teal,
+                    onTap: () => _sendCommand("CMD:PING"),
+                  ),
+                  _ActionButton(
+                    icon: Icons.settings_backup_restore, 
+                    label: "CALIB", 
+                    color: Colors.orange,
+                    onTap: () => _sendCommand("CMD:CALIBRATE"),
+                  ),
+                  _ActionButton(
+                    icon: Icons.auto_mode, 
+                    label: "AUTO", 
+                    color: Colors.purpleAccent,
+                    onTap: () => _sendCommand("CMD:AUTO"), 
+                  ),
+                ],
+              ),
+            )
+          ],
         ),
       ),
+    );
+  }
+}
+
+class _DeviceCard extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Color color;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _DeviceCard({
+    required this.label, 
+    required this.icon, 
+    required this.color, 
+    required this.isSelected, 
+    required this.onTap
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        margin: const EdgeInsets.only(right: 12),
+        width: 80,
+        decoration: BoxDecoration(
+          color: isSelected ? color.withOpacity(0.2) : Colors.white10,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected ? color : Colors.transparent,
+            width: 2
+          )
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, 
+              color: isSelected ? color : Colors.white24, 
+              size: 32
+            ),
+            const SizedBox(height: 8),
+            Text(label, 
+              style: TextStyle(
+                color: isSelected ? Colors.white : Colors.white54,
+                fontWeight: FontWeight.bold
+              )
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ActionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _ActionButton({required this.icon, required this.label, required this.color, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton.filledTonal(
+          onPressed: onTap,
+          icon: Icon(icon),
+          style: IconButton.styleFrom(
+            backgroundColor: color.withOpacity(0.2),
+            foregroundColor: color,
+            fixedSize: const Size(56, 56)
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(label, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold))
+      ],
     );
   }
 }

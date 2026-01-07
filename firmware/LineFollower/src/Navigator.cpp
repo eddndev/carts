@@ -2,8 +2,7 @@
 
 Navigator::Navigator() {
   currentState = NAV_IDLE;
-  stackPtr = 0;
-  isExploring = false;
+  isAutonomous = false;
   lastNodeTime = 0;
 
   currentTurnState = TURN_IDLE;
@@ -25,11 +24,14 @@ void Navigator::update(bool nodeDetected, bool lineDetected,
       lastNodeTime = currentMillis;
       
 #if ENABLE_WIFI
-      // Hybrid Architecture Mod: Stop and wait for Host (App) instruction
+      // Hybrid Architecture: Stop and wait for Host (App) instruction
+      // Even in "AUTO" mode, we wait for the App to send "GO_STRAIGHT" to keep logic consistent
+      // unless we want 'Smart Autonomous' on firmware. 
+      // User said: "App will receive Node Reached and respond GO_STRAIGHT".
       currentState = NAV_WAITING_HOST;
       Serial.println("NAV: Node Reached. Waiting for Host...");
 #else
-      // Offline Mode: Self-manage handling (Autonomous)
+      // Offline Mode: Self-manage
       handleNodeArrival();
 #endif
     }
@@ -45,8 +47,6 @@ void Navigator::update(bool nodeDetected, bool lineDetected,
       }
     } else if (currentTurnState == TURN_CAPTURE) {
       // Phase 2: Wait for Center Sensor (Line Capture)
-      // Constraint: We must be past the blind phase so we don't catch the SAME
-      // line we just left.
       if (lineDetected) {
         Serial.println("NAV: Turn Complete (Line Captured)");
         currentState = NAV_FOLLOWING;
@@ -63,10 +63,10 @@ void Navigator::update(bool nodeDetected, bool lineDetected,
   }
 }
 
-void Navigator::startExploration() {
-  isExploring = true;
+void Navigator::startAutonomous() {
+  isAutonomous = true;
   currentState = NAV_FOLLOWING;
-  Serial.println("NAV: Starting DFS Exploration");
+  Serial.println("NAV: Starting Autonomous Mode (Simple)");
 }
 
 NavState Navigator::getState() { return currentState; }
@@ -75,11 +75,10 @@ void Navigator::handleNodeArrival() {
   currentState = NAV_AT_NODE;
   Serial.println("NAV: Node Detected!");
 
-  if (isExploring) {
-    // DFS Logic: Right-Hand Rule / Right-First Search
-    // Priority: Right -> Straight -> Left
-    Serial.println("NAV: Exploring... Decision: Right");
-    turnRight();
+  if (isAutonomous) {
+    // Simple Logic: Priority Straight -> Left
+    Serial.println("NAV: Auto Decision: Straight/Forward");
+    goStraight(); 
   }
 }
 
@@ -101,7 +100,7 @@ void Navigator::turnRight() {
 
 void Navigator::goStraight() { currentState = NAV_FOLLOWING; }
 
-void Navigator::stop() { currentState = NAV_IDLE; }
+void Navigator::stop() { currentState = NAV_IDLE; isAutonomous = false; }
 
 void Navigator::processExternalCommand(String cmd) {
   if (cmd == "GO_LEFT")

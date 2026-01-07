@@ -4,7 +4,6 @@
 #include "Config.h"
 #include <Arduino.h>
 
-
 enum NavState {
   NAV_IDLE,
   NAV_FOLLOWING,
@@ -21,13 +20,6 @@ enum TurnState {
 
 enum Direction { DIR_UP, DIR_RIGHT, DIR_DOWN, DIR_LEFT, DIR_NONE };
 
-struct NavigationNode {
-  int id;
-  bool visited;
-  int edges[4]; // Directions: 0=Up, 1=Right, 2=Down, 3=Left. Store neighbor
-                // Node IDs. -1 if no edge.
-};
-
 class Navigator {
 public:
   Navigator();
@@ -35,14 +27,14 @@ public:
   void update(bool nodeDetected, bool lineDetected,
               unsigned long currentMillis);
 
-  void startExploration();
+  void startAutonomous(); // Renamed from startExploration
   void stop();
 
   NavState getState();
-  Direction getTurnDirection(); // To tell MotorController which way to spin
+  Direction getTurnDirection(); 
 
   // Command Interface
-  void processExternalCommand(String cmd); // Hybrid Arch Input
+  void processExternalCommand(String cmd); 
 
   void turnLeft();
   void turnRight();
@@ -56,13 +48,8 @@ private:
   TurnState currentTurnState;
   unsigned long turnStartTime;
   Direction targetTurnDirection;
-  bool turnComplete;
 
-  // DFS / Exploration Variables
-  bool isExploring;
-  // Simple stack for DFS (fixed size for memory safety on Uno)
-  int nodeStack[20];
-  int stackPtr;
+  bool isAutonomous;
 
   void handleNodeArrival();
 };

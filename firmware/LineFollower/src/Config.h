@@ -46,18 +46,18 @@ const uint8_t SENSOR_COUNT = 6;
 #define PID_KI 0.0
 #define PID_KD 1.0 // High Damping maintained
 
-#define BASE_SPEED 60 // Lower control point for precision
+#define BASE_SPEED 85 // Increased for reliable movement
 #define MAX_SPEED 200 // PID headroom
-#define TURN_SPEED 120
+#define TURN_SPEED 140 // Sharper turns with higher power
 
 // Voltage Safety Limit for 11.1V Battery -> 6V Motors
 // Calculation: (6V / 11.1V) * 255 ~= 138.
-// User Request: Lowering even more to prevent derailment.
-// 92 -> 75 (~4V-5V effective, safe and slower)
-#define MAX_PWM_LIMIT 75
+// User Request: Increased power for better traction/movement.
+// 100 PWM (~4.5V) provides better torque than 75.
+#define MAX_PWM_LIMIT 100
 
 // Deadband Correction (Measured)
-// Lowered slightly to rely on kinetic friction
+// Lowered slightly to rely on kinetic friction (kept same for now)
 #define MIN_PWM_L 70 // Tune these if it doesn't move
 #define MIN_PWM_R 65
 

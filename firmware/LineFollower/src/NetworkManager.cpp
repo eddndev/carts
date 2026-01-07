@@ -140,6 +140,10 @@ bool NetworkManager::sendPacket(const String &message) {
   return false;
 }
 
+void NetworkManager::broadcast(const String &message) {
+  sendPacket(message); // sendPacket already targets 255.255.255.255
+}
+
 bool NetworkManager::respondToLastSender(const String &message) {
   // Reply directly to the device that sent the last packet
   if (Udp.beginPacket(Udp.remoteIP(), Udp.remotePort()) == 1) {

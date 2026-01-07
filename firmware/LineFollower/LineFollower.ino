@@ -18,8 +18,6 @@
 #include "src/PIDController.h"
 #include <Arduino.h>
 
-// #include "src/Sonar.h"
-
 // Instantiate objects
 NetworkManager network;
 LedController led;
@@ -27,10 +25,12 @@ LineSensor sensors;
 MotorController motors;
 PIDController pid(PID_KP, PID_KI, PID_KD);
 Navigator navigator;
-// Sonar sonar;
 
 unsigned long lastPingTime = 0;
 const long interval = 2000; // Send ping every 2 seconds
+
+// Telemetry Timer
+unsigned long lastTelemetryTime = 0;
 
 void setup() {
   Serial.begin(115200);
@@ -44,10 +44,8 @@ void setup() {
   // Initialize Sensors
   sensors.begin();
 
-  // Initialize Navigator & Sonar
   // Initialize Navigator
   navigator.begin();
-  // sonar.begin();
 
   // Calibration Sequence
   Serial.println("Starting Calibration...");
@@ -66,16 +64,20 @@ void setup() {
   network.begin(); // Will start connecting in background
 #else
   Serial.println("OFFLINE MODE: Skipping Network.");
-  Serial.println("Auto-starting Autonomous Exploration...");
-  navigator.startExploration(); // Start DFS immediately
+  Serial.println("Auto-starting Autonomous Mode...");
+  navigator.startAutonomous(); // Start Simple Following immediately
   led.showExplore(); // Show "Searching"/Moving animation
 #endif
- 
-  // led.showStop(); // Removed in offline mode so we see the Explore animation
 }
 
 void loop() {
   unsigned long currentMillis = millis();
+
+  // 0. Sensor Reading (FIRST THING: Get fresh, calibrated data)
+  uint16_t position = sensors.readLine();
+  LineSensor::SensorState sensorState = sensors.getState();
+  bool isNode = (sensorState == LineSensor::STATE_NODE);
+  bool isLine = (sensorState == LineSensor::STATE_LINE);
 
 #if ENABLE_WIFI
   // 1. Update Network (State Machine)
@@ -110,26 +112,34 @@ void loop() {
   led.update();
 
 #if ENABLE_WIFI
-  // Periodic Heartbeat
+  // Periodic Heartbeat (2s)
   if (currentMillis - lastPingTime > interval) {
       lastPingTime = currentMillis;
       if (network.isConnected()) {
-          // Send identity so App detects us even if PING fails
           network.sendPacket("PONG:CartFollower");
       }
   }
+
+  // --- SENSOR TELEMETRY (200ms) ---
+  if (currentMillis - lastTelemetryTime >= 200) {
+    lastTelemetryTime = currentMillis;
+
+    // Format: {"s":<state>, "v":[s0,s1,s2,s3,s4,s5]}
+    String json = "{";
+    json += "\"s\":" + String(navigator.getState()); 
+    uint16_t* sensorValues = sensors.getRawValues();
+    json += ",\"v\":[";
+    for(int i=0; i<SENSOR_COUNT; i++) {
+       // Normalize or just send raw? Sending raw (0-1000) is safer, app handles threshold.
+       json += String(sensorValues[i]);
+       if(i < SENSOR_COUNT-1) json += ",";
+    }
+    json += "]}";
+    
+    // Broadcast telemetry
+    network.broadcast(json);
+  }
 #endif
-
-
-  
-  // Actually, to avoid breaking the file structure with replace_file_content on a huge block,
-  // I will only replace the setup and top of loop here, and then use a second call to wrap the command section if needed.
-  // Wait, the previous tool call was limited range. 
-  // Let's replace the SETUP part first.
-
-
-  // 3. Update LED animations
-  led.update();
 
 #if ENABLE_WIFI
   // 4. Handle Commands
@@ -145,8 +155,8 @@ void loop() {
       network.respondToLastSender("ACK:" + navCmd);
     }
     // Comandos de sistema
-    else if (msg.startsWith("CMD:EXPLORE")) {
-      navigator.startExploration();
+    else if (msg.startsWith("CMD:AUTO")) {
+      navigator.startAutonomous();
       led.showExplore();
     } else if (msg.startsWith("CMD:STOP")) {
       navigator.stop();
@@ -162,7 +172,6 @@ void loop() {
       delay(1000);
       led.showStop();
     } else if (msg.startsWith("CMD:PING")) {
-      // Reply with ACK to differentiate from auto-heartbeat
       network.respondToLastSender("ACK:PING");
       led.showPacketReceived();
     } else if (msg.startsWith("CMD:CALIBRATE")) {
@@ -171,7 +180,7 @@ void loop() {
       network.respondToLastSender("ACK:CALIBRATE");
       led.showStop();
     }
-    // TEST Commands (from Test Page)
+    // TEST Commands
     else if (msg.startsWith("TEST:FWD")) {
       motors.setSpeeds(BASE_SPEED, BASE_SPEED);
       network.respondToLastSender("ACK:FWD");
@@ -188,21 +197,17 @@ void loop() {
   }
 #endif
 
-  // 4. Sensor Reading
-  uint16_t position = sensors.readLine();
-  LineSensor::SensorState sensorState = sensors.getState();
-  bool isNode = (sensorState == LineSensor::STATE_NODE);
-  bool isLine = (sensorState == LineSensor::STATE_LINE);
+  // 4. Sensor Reading (Moved to top of loop)
 
   // 5. Update Navigation Logic
   navigator.update(isNode, isLine, currentMillis);
   NavState state = navigator.getState();
 
-  // 6. Debug Output & Visual Feedback
+  // 6. Debug Output
   static unsigned long lastPrint = 0;
   static NavState lastReportedState = NAV_IDLE;
 
-  if (millis() - lastPrint > 200) {
+  if (millis() - lastPrint > 500) { // Slowed down UART debug to prioritize UDP
     lastPrint = millis();
     Serial.print("SENSORS: [");
     uint16_t *raw = sensors.getRawValues();
@@ -210,51 +215,25 @@ void loop() {
       Serial.print(raw[i] > 600 ? "X" : "_");
     }
     Serial.print("] STATE: ");
-    switch (sensorState) {
-    case LineSensor::STATE_GAP:
-      Serial.println("GAP");
-      break;
-    case LineSensor::STATE_LINE:
-      Serial.println("LINE");
-      break;
-    case LineSensor::STATE_NODE:
-      Serial.println("NODE");
-      break;
-    case LineSensor::STATE_COMPLEX:
-      Serial.println("COMPLEX");
-      break;
-    }
+    Serial.println(state);
 
-    // Broadcast state changes to App Console
+    // Broadcast state changes (Event driven)
     if (state != lastReportedState) {
       lastReportedState = state;
-      switch (state) {
-      case NAV_IDLE:
-        network.sendPacket("STATUS:IDLE");
-        break;
-      case NAV_FOLLOWING:
-        network.sendPacket("STATUS:FOLLOWING");
-        break;
-      case NAV_AT_NODE:
-        network.sendPacket("STATUS:AT_NODE");
-        break;
-      case NAV_TURNING:
-        network.sendPacket("STATUS:TURNING");
-        break;
-      case NAV_WAITING_HOST:
-        network.sendPacket("STATUS:WAITING_HOST");
-        break;
-      }
+      // Also broadcast status change to network
+#if ENABLE_WIFI
+      char buffer[32];
+      sprintf(buffer, "STATUS_CHANGE:%d", state);
+      network.broadcast(buffer);
+#endif
     }
-
-    // Update LED Matrix based on high-level state
+    
+    // Matrix updates
     if (state == NAV_FOLLOWING) {
       led.showLinePosition(position);
     } else if (isNode) {
       led.showPing();
     }
-    // Note: STOP/EXPLORE/RESET animations are triggered by commands and persist
-    // until overridden or timeout, unless showLinePosition interrupts them.
   }
 
   // 7. Motor Control
