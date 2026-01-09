@@ -46,15 +46,15 @@ const uint8_t SENSOR_COUNT = 6;
 #define PID_KI 0.0
 #define PID_KD 1.0 // High Damping maintained
 
-#define BASE_SPEED 85 // Increased for reliable movement
-#define MAX_SPEED 200 // PID headroom
-#define TURN_SPEED 140 // Sharper turns with higher power
+#define BASE_SPEED 30 // Increased for reliable movement
+#define MAX_SPEED 180 // PID headroom
+#define TURN_SPEED 90 // Sharper turns with higher power
 
 // Voltage Safety Limit for 11.1V Battery -> 6V Motors
 // Calculation: (6V / 11.1V) * 255 ~= 138.
 // User Request: Increased power for better traction/movement.
 // 100 PWM (~4.5V) provides better torque than 75.
-#define MAX_PWM_LIMIT 100
+#define MAX_PWM_LIMIT 90
 
 // Deadband Correction (Measured)
 // Lowered slightly to rely on kinetic friction (kept same for now)
@@ -63,7 +63,7 @@ const uint8_t SENSOR_COUNT = 6;
 
 // Speed Matching Factors (0.0 to 1.0)
 #define SPEED_FACTOR_L 1.0
-#define SPEED_FACTOR_R 0.95
+#define SPEED_FACTOR_R 0.9
 
 // --- SONAR (HC-SR04) ---
 // LOGIC DISABLED IN MAIN LOOP, DEFINES KEPT FOR COMPILATION
