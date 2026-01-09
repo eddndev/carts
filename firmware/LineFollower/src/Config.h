@@ -11,11 +11,11 @@
 
 // MASTER SWITCH: Set to FALSE for Autonomous Offline Mode (No WiFi)
 // Set to TRUE for Hybrid Mode (Waiting for App commands)
-#define ENABLE_WIFI false
+#define ENABLE_WIFI true
 
 // WiFi Credentials (Ignored if ENABLE_WIFI is false)
-#define SECRET_SSID "CartControl"
-#define SECRET_PASS "0102030405"
+#define SECRET_SSID "carts"
+#define SECRET_PASS "10carts01"
 
 // Communication
 #define UDP_PORT 4210
@@ -46,24 +46,24 @@ const uint8_t SENSOR_COUNT = 6;
 #define PID_KI 0.0
 #define PID_KD 1.0 // High Damping maintained
 
-#define BASE_SPEED 60 // Lower control point for precision
-#define MAX_SPEED 200 // PID headroom
-#define TURN_SPEED 120
+#define BASE_SPEED 30 // Increased for reliable movement
+#define MAX_SPEED 180 // PID headroom
+#define TURN_SPEED 90 // Sharper turns with higher power
 
 // Voltage Safety Limit for 11.1V Battery -> 6V Motors
 // Calculation: (6V / 11.1V) * 255 ~= 138.
-// User Request: Lowering even more to prevent derailment.
-// 92 -> 75 (~4V-5V effective, safe and slower)
-#define MAX_PWM_LIMIT 75
+// User Request: Increased power for better traction/movement.
+// 100 PWM (~4.5V) provides better torque than 75.
+#define MAX_PWM_LIMIT 90
 
 // Deadband Correction (Measured)
-// Lowered slightly to rely on kinetic friction
+// Lowered slightly to rely on kinetic friction (kept same for now)
 #define MIN_PWM_L 70 // Tune these if it doesn't move
 #define MIN_PWM_R 65
 
 // Speed Matching Factors (0.0 to 1.0)
 #define SPEED_FACTOR_L 1.0
-#define SPEED_FACTOR_R 0.95
+#define SPEED_FACTOR_R 0.9
 
 // --- SONAR (HC-SR04) ---
 // LOGIC DISABLED IN MAIN LOOP, DEFINES KEPT FOR COMPILATION

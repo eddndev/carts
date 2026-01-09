@@ -29,8 +29,8 @@ uint16_t LineSensor::readLine() {
 }
 
 uint16_t* LineSensor::getRawValues() {
-    // Just read raw without position calculation for debugging
-    qtr.read(trustedSensorValues);
+    // Return the values populated by the last readLine() call (Calibrated 0-1000)
+    // We removed qtr.read(trustedSensorValues) to avoid overwriting with raw uncalibrated data.
     return trustedSensorValues;
 }
 

@@ -19,6 +19,7 @@ public:
   void begin(); // Now non-blocking
   void update(); // Handles state machine
   bool sendPacket(const String &message);
+  void broadcast(const String &message); // Explicit broadcast
   bool respondToLastSender(const String &message);
   String getLastMessage();
   bool hasNewMessage();
